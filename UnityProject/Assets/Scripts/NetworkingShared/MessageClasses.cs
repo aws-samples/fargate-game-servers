@@ -1,5 +1,5 @@
 ﻿// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT-0
 
 // Here you would define your message types for the messages between server and client
 // NOTE: We are using BinaryFormatter for simplicity to serialize/deserialize binary messages.

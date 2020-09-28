@@ -1,5 +1,5 @@
 ﻿// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT-0
 
 using UnityEngine;
 using System.Collections.Generic;
@@ -33,7 +33,7 @@ public class Client : MonoBehaviour
     //Cognito credentials for sending signed requests to the API
     public static Amazon.Runtime.ImmutableCredentials cognitoCredentials = null;
 
-    // Helper function check if an enemy exists in the enemy list already
+    // Helper function to check if an enemy exists in the enemy list already
     private bool EnemyPlayerExists(int clientId)
     {
         foreach(NetworkPlayer player in enemyPlayers)
@@ -64,6 +64,7 @@ public class Client : MonoBehaviour
     {
         FindObjectOfType<UIManager>().SetTextBox("Setting up Client..");
 
+        // Get an identity and connect to server
         CognitoAWSCredentials credentials = new CognitoAWSCredentials(
             MatchmakingClient.identityPoolID,
             MatchmakingClient.region);
@@ -97,7 +98,7 @@ public class Client : MonoBehaviour
         }
     }
 
-    // Do matchmaking and connect to the server endpoint received
+    // Find a game session and connect to the server endpoint received
     // This is a coroutine to simplify the logic and keep our UI updated throughout the process
     IEnumerator ConnectToServer()
     {
@@ -109,7 +110,6 @@ public class Client : MonoBehaviour
         this.networkClient = new NetworkClient();
         // We will wait for the matchmaking and connection coroutine to end before creating the player
         yield return StartCoroutine(this.networkClient.RequestGameSession());
-        //this.networkClient.Connect();
 
         if (this.networkClient.ConnectionSucceeded())
         {

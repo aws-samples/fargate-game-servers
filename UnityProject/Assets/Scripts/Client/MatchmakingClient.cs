@@ -1,5 +1,5 @@
 ﻿// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT-0
 
 using System;
 using UnityEngine;
@@ -11,6 +11,7 @@ using AWSSignatureV4_S3_Sample.Signers;
 #if CLIENT
 
 // **** MATCMAKING API CLIENT ***
+// The Backend service called by this client will do simple placement of players to new or existing sessions
 
 public class MatchmakingClient
 {
@@ -37,7 +38,7 @@ public class MatchmakingClient
         return responseStr;
     }
 
-    // Not used in the example but can be used to request game session directly from the fleet without matchmaking
+    // Request a game session from the backend
     public GameSessionInfo RequestGameSession()
     {
         try

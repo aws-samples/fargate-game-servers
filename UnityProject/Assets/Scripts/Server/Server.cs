@@ -1,5 +1,5 @@
 ﻿// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: MIT-0
 
 using System.Net;
 using System.Net.Sockets;
@@ -25,7 +25,7 @@ public class TaskData
 public class GameServerStatusData
 {
     public string taskArn { get; set; } //arn of the task the server is running on (inluding container ID)
-    public bool serverInUse { get; set; } //Is this server in use already (claimed and players connected)
+    public bool serverInUse { get; set; } //Is this server in use already (claimed and max amount of players connected)
     public int currentPlayers { get; set; } //amount of current players on the server
     public int maxPlayers { get; set; } //Max amount of players we accept
     public bool ready { get; set; } //Are we ready to accept clients?
@@ -47,7 +47,7 @@ public class Server : MonoBehaviour
     // TODO: Update this to your selected Region
     RegionEndpoint regionEndpoint = RegionEndpoint.USEast1;
 
-    // How many times the game server is reused for sessions. If you expect  verylittle memory leaks or other crashes, it can be higher
+    // How many times the game server is reused for sessions. If you expect very little memory leaks or other issues/crashes, it could be higher
     public static int totalGameSessionsToHost = 3;
     public static int hostedGameSessions = 0;
 
@@ -61,6 +61,7 @@ public class Server : MonoBehaviour
     //We get events back from the NetworkServer through this static list
     public static List<SimpleMessage> messagesToProcess = new List<SimpleMessage>();
 
+    // Game server data
     private string taskDataArn = null;
     private string taskDataArnWithContainer = null;
     private string publicIP = null;
@@ -282,7 +283,7 @@ public class Server : MonoBehaviour
             InvocationType = InvocationType.Event
         };
 
-        // NOTE: You should catch response to validate it was successful and do something useful with that information
+        // NOTE: We could catch response to validate it was successful and do something useful with that information
         lambdaClient.InvokeAsync(request);
     }
 
