@@ -100,7 +100,7 @@ Resources:
         DefaultAuthorizer: AWS_IAM
         InvokeRole: NONE #Using the Lambda role instead of caller
 
-  # Scheduled Lambda function to start new game server Fargate tasks whenever we don't enough excess capacity
+  # Scheduled Lambda function to start new game server Fargate Tasks whenever we don't have enough excess capacity
   ScalingFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -209,6 +209,7 @@ Resources:
         - AWSCloudFormationReadOnlyAccess
         - AmazonECS_FullAccess
 
+  # Function called by clients through the API to request a game session
   RequestGameSession:
     Type: AWS::Serverless::Function 
     Properties:
@@ -245,10 +246,10 @@ Resources:
 
 Outputs:
   ScalingFunction:
-    Description: "Hello World Lambda Function ARN"
+    Description: "Scaling Lambda Function ARN"
     Value: !GetAtt ScalingFunction.Arn
   ScalingFunctionIamRole:
-    Description: "Implicit IAM Role created for Hello World function"
+    Description: "Implicit IAM Role created for Scaling function"
     Value: !GetAtt ScalingFunction.Arn
   FrontEndAPI:
     Description: "API Gateway endpoint URL for Prod stage for FrontEndAPI"
