@@ -108,11 +108,11 @@ The scaling speed should be sufficient to most needs and if you run the Tasks in
     * Build the project to the `LinuxServerBuild` folder (Click "Build" and in new window choose "LinuxServerBuild" folder, enter "FargateExampleServer" in "Save as" field and click "Save"). **NOTE**: It's important to give the exact name `FargateExampleServer` for the build as the Dockerfile uses this.
 5. **Build Docker Image and Deploy Task Configuration**
     * Make sure you have Docker installed and running
-    * Run `CloudFormationResources/deploy-game-server-and-update-task-definition.sh` to build the docker image and deploy
+    * Run `CloudFormationResources/deploy-game-server-and-update-task-definition.sh` to build the docker image, create an ECR repository and upload the image and deploy the Task Definition
 6. **Deploy the Backend Services with SAM**
     * Make sure you have the SAM CLI installed
     * The template uses Python 3.7 for the Lambda functions so **you will need Python 3.7 installed locally as well**. [Download Python 3.7 here](https://www.python.org/downloads/release/python-379/).
-    * Run the `BackendServices/deploy.sh` script to deploy the backend Services
+    * Run the `BackendServices/deploy.sh` script to deploy the backend Services. This first deployment will take some time as the networking interfaces to the VPC are being deployed as well.
     * You should see the Scaler function starting quickly after the Stack is deployed to run every minute and 3-4 Tasks being started in the ECS Cluster, each hosting 10 game server containers
 7. **Set the API endpoint to the Unity Project**
     * Set the value of `static string apiEndpoint` to the endpoint created by the backend deployment in `UnityProject/Assets/Scripts/Client/MatchmakingClient.cs`
