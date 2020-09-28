@@ -7,7 +7,7 @@ from boto3.dynamodb.conditions import Key, Attr
 import redis
 from datetime import timedelta
 
-# Containers in a single Task (this is configured outside of the Lambda so update as needed!)
+# Containers in a single Task (this is configured also outside of the Lambda so update as needed!)
 containers_in_task = 10
 
 # We want to keep at least X available game servers running
@@ -29,7 +29,7 @@ def lambda_handler(event, context):
 
     print("Running scheduled Lambda function to start new game server tasks when necessary")
 
-    # Get the resources from ECS and Task CLoudFormation Stacks
+    # Get the resources from ECS and Task CLoudFormation Stacks from environment variables
     fargate_cluster_name = os.environ['FARGATE_CLUSTER_NAME'] 
     subnet1 = os.environ['SUBNET_1']
     subnet2 = os.environ['SUBNET_2']
@@ -48,6 +48,7 @@ def lambda_handler(event, context):
     # Setup Redis client
     redis_client = redis.Redis(host=redis_endpoint, port=6379, db=0)
 
+    # Track start time
     start_time = time.time()
 
     ### Run the scaler up to 60 seconds (next one will be triggered after 1 minute)
@@ -55,7 +56,7 @@ def lambda_handler(event, context):
 
         try:
 
-            # 1. Get the available, active and full servers (support up to 100k each) to calculate total sum
+            # 1. Get the available priority, available, active and full servers (support up to 100k each) to calculate total sum
             available_game_servers_response = redis_client.scan(count=100000,match="available-gameserver-*")
             available_game_servers = len(available_game_servers_response[1])
             available_priority_game_servers_response = redis_client.scan(count=100000,match="available-priority-gameserver-*")
@@ -83,7 +84,7 @@ def lambda_handler(event, context):
             if percentage_available < available_game_servers_target_percentage or total_game_servers < total_game_servers_target_min:
                 amount_to_start = int((available_game_servers_target_percentage - percentage_available) * total_game_servers)
                 print("planning to start game servers amount:" + str(amount_to_start))
-                # Make sure we have minimum of 1 server started 
+                # Make sure we have minimum of 1 server started as low capacity was identified
                 if amount_to_start == 0:
                     amount_to_start = 1
                     print("clamping value to minimum of 1 started game servers")

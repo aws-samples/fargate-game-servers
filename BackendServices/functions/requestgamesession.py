@@ -19,6 +19,8 @@ from redis.exceptions import (
     WatchError,
 )
 
+# Tries to find an existing or free game session and return the IP and Port to the client
+
 def lambda_handler(event, context):
 
     # Get redis endpoint and set up
@@ -32,7 +34,8 @@ def lambda_handler(event, context):
     if len(active_game_servers_response[1]) > 0:
         print("Found an active game server, trying to take the spot")
 
-        # Try to claim a spot on a random active game server. Use WATCH locking to make sure no-one else does the same
+        # Try to claim a spot on a random active game server
+        # Use WATCH locking to cancel the placement in case someone else took it a the same time
         with redis_client.pipeline() as pipe:
             # We'll try this 25 times and then just fail
             for x in range(25):
@@ -43,7 +46,8 @@ def lambda_handler(event, context):
                     # put a WATCH on a lock for this specific key
                     pipe.watch(b'-lock'+game_server_key)
 
-                    # get the current reservation and max players for this game server. Server will use "current-players" for actually connected players
+                    # get the current reservation and max players for this game server.
+                    # Server will use "current-players" for actually connected players
                     current_reservations = pipe.hget(game_server_key, b'reserved-player-slots')
                     max_players = pipe.hget(game_server_key, b'max-players')
                     print("current reservations: " + str(current_reservations))
@@ -52,14 +56,14 @@ def lambda_handler(event, context):
                     if current_reservations == None:
                         current_reservations = 0
 
-                    # Check if this was preserved full already
+                    # Check if this server is full already
                     if int(current_reservations) >= int(max_players):
                         print("Server full, cannot join")
                         continue
 
                     next_value = int(current_reservations) + 1
 
-                    # now we can put the pipeline back into buffered mode with MULTI
+                    # now we can put the pipeline back into buffered mode with MULTI and try to update
                     pipe.multi()
                     pipe.hset(game_server_key, b'reserved-player-slots', next_value)
                     pipe.hset(game_server_key, b'last-reservation-time', time.time())
@@ -82,9 +86,9 @@ def lambda_handler(event, context):
                         "body": json.dumps({ 'publicIP': publicIP.decode('UTF-8'), 'port': port.decode('UTF-8') })
                     }
                 except WatchError:
-                    # another client must have changed 'OUR-SEQUENCE-KEY' between
+                    # another client must have changed the game server data in between
                     # the time we started WATCHing it and the pipeline's execution.
-                    # our best bet is to just retry.
+                    # We will retry a placement
                     print("Failed to reserve slot, retrying")
 
 
@@ -106,11 +110,13 @@ def lambda_handler(event, context):
 
             if len(available_game_servers_response[1]) > 0:
                 print("Found an available game server, trying to take the spot")
+                # You can use these 3 lines for debugging if you need more information on the server
                 #print(available_game_servers_response[1])
                 #server_info = redis_client.hgetall(available_game_servers_response[1][0])
                 #print(server_info)
 
-            # Try to claim a spot on a random available server, use WATCH locking to make sure no-one else does the same
+            # Try to claim a spot on a random available game server
+            # Use WATCH locking to cancel the placement in case someone else took it a the same time
             with redis_client.pipeline() as pipe:
 
                 # Take a random available game server
@@ -126,7 +132,8 @@ def lambda_handler(event, context):
                 # put a WATCH on a lock for this specific key
                 pipe.watch(b'-lock'+game_server_key)
 
-                # get the current reservation and max players for this game server. Server will use "current-players" for actually connected players
+                # get the current reservation and max players for this game server.
+                # Server will use "current-players" for actually connected players
                 current_reservations = pipe.hget(game_server_key, b'reserved-player-slots')
                 max_players = pipe.hget(game_server_key, b'max-players')
                 print("current reservations: " + str(current_reservations))
@@ -142,7 +149,7 @@ def lambda_handler(event, context):
 
                 next_value = int(current_reservations) + 1
 
-                # now we can put the pipeline back into buffered mode with MULTI
+                # now we can put the pipeline back into buffered mode with MULTI and try to update
                 pipe.multi()
                 pipe.hset(game_server_key, b'reserved-player-slots', next_value)
                 pipe.hset(game_server_key, b'last-reservation-time', time.time())

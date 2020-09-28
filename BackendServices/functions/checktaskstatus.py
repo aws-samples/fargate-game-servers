@@ -18,7 +18,6 @@ def lambda_handler(event, context):
 
     # Get the parameters from the server
     taskArn = event["taskArn"]
-
     print("taskArn: " + str(taskArn))
 
     # Get all game servers within this task in any state (active, full, available)

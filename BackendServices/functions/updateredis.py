@@ -7,6 +7,8 @@ from boto3.dynamodb.conditions import Key, Attr
 import redis
 from datetime import timedelta
 
+# Updates game server data to Redis (called by the game servers)
+# Also checks any outdated placement reservations on the server (clients that got a placement but never joined)
 
 def lambda_handler(event, context):
 
@@ -28,7 +30,7 @@ def lambda_handler(event, context):
     port = event["port"]
     serverTerminated = event["serverTerminated"]
 
-    # Get only the Task arn (it includes the container)
+    # Get only the Task arn (as taskArn also includes the game server container)
     onlyTaskArn = taskArn.split("-container")[0]
 
     print("server_in_use: " + str(server_in_use))
@@ -46,9 +48,11 @@ def lambda_handler(event, context):
     game_server_key = "available-gameserver-"+taskArn
     last_reservation_time = redis_client.hget(game_server_key, "last-reservation-time")
     current_reservations = None
+    # No reservation time in available, try priority
     if last_reservation_time == None:
         game_server_key = "available-priority-gameserver-"+taskArn
         last_reservation_time = redis_client.hget(game_server_key, "last-reservation-time")
+    # No reservation time in available or priority, try active
     if last_reservation_time == None:
         game_server_key = "active-gameserver-"+taskArn
         last_reservation_time = redis_client.hget(game_server_key, "last-reservation-time")
@@ -86,7 +90,7 @@ def lambda_handler(event, context):
         print("Public IP not set, can't update server in Redis")
         return
 
-    # 1. If server is in use, delete from available servers and update to in use servers
+    # OPTION 1. If server is in use (full), delete from available servers and update to in use servers
     if server_in_use == 1:
         print("marking server as in use")
         # Delete the possible other gameserver key
@@ -108,7 +112,7 @@ def lambda_handler(event, context):
         redis_client.set("prioritize-"+onlyTaskArn, "yes")
         redis_client.expire("prioritize-"+onlyTaskArn, timedelta(seconds=gameserverdata_ttl))
 
-    # 2. If there's someone playing already, add to the active servers (these are used when searching for games)
+    # OPTION 2. If there's someone playing already, add to the active servers (these are used when searching for games)
     elif current_players > 0:
         print("marking server as active (at least one player connected)")
         # Delete the possible other gameserver keys
@@ -134,7 +138,7 @@ def lambda_handler(event, context):
         redis_client.set("prioritize-"+onlyTaskArn, "yes")
         redis_client.expire("prioritize-"+onlyTaskArn, timedelta(seconds=gameserverdata_ttl))
 
-    # 3. if server is available and no players, delete from full and active servers and set current status based on parameters
+    # OPTION 3. if server is available and no players, delete from full and active servers and set current status based on parameters
     else:
         print("marking server available")
 
@@ -147,6 +151,7 @@ def lambda_handler(event, context):
             print("This server should be marked priority")
             # Delete the possible other available key as it will never be used again once the Task is priority
             redis_client.delete("available-gameserver-"+taskArn)
+            # Use the priority prefix
             available_prefix = "available-priority-gameserver-"
             # Update priority key so it doesn't expire
             redis_client.set("prioritize-"+onlyTaskArn, "yes")
