@@ -225,4 +225,4 @@ To clean up all the resources you need to make sure that the correct region is d
 
 # License
 
-This example is licensed under the Apache 2.0 License. See LICENSE file.
+This example is licensed under the MIT-0 License. See LICENSE file.
