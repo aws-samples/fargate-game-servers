@@ -1,0 +1,260 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SAM App for staring Fargate game server tasks on a schedule when needed
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 300
+
+Parameters:
+  ECSResourcesStackName: 
+      Type: String
+      Default: "fargate-game-servers-ecs-resources"
+      Description: Name of the stack for the ECS resources to import
+  RedisResourcesStackName: 
+      Type: String
+      Default: "fargate-game-servers-elasticache-redis"
+      Description: Name of the stack for the Redis resources to import
+  TaskResourcesStackName: 
+      Type: String
+      Default: "fargate-game-servers-task-definition"
+      Description: Name of the stack for the Task resources to import
+
+
+Resources:
+
+  # We define this log group explicitly to support the metrics filters
+  ScalingFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: [ ScalingFunction ]
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ScalingFunction}
+      RetentionInDays: 30
+
+  # METRICS FROM THE SCALER
+  AvailableGameServers: 
+    Type: AWS::Logs::MetricFilter
+    Properties: 
+      LogGroupName:
+        !Ref ScalingFunctionLogGroup
+      FilterPattern: "{ $.Available_game_servers = * }"
+      MetricTransformations: 
+        - 
+          MetricValue: "$.Available_game_servers"
+          MetricNamespace: "Scaler"
+          MetricName: "AvailableGameServers"
+  ActiveGameServers: 
+    Type: AWS::Logs::MetricFilter
+    Properties: 
+      LogGroupName:
+        !Ref ScalingFunctionLogGroup
+      FilterPattern: "{ $.Active_game_servers = * }"
+      MetricTransformations: 
+        - 
+          MetricValue: "$.Active_game_servers"
+          MetricNamespace: "Scaler"
+          MetricName: "ActiveGameServers"
+  FullGameServers: 
+    Type: AWS::Logs::MetricFilter
+    Properties: 
+      LogGroupName:
+        !Ref ScalingFunctionLogGroup
+      FilterPattern: "{ $.Full_game_servers = * }"
+      MetricTransformations: 
+        - 
+          MetricValue: "$.Full_game_servers"
+          MetricNamespace: "Scaler"
+          MetricName: "FullGameServers"
+  TotalGameServers: 
+    Type: AWS::Logs::MetricFilter
+    Properties: 
+      LogGroupName:
+        !Ref ScalingFunctionLogGroup
+      FilterPattern: "{ $.Total_game_servers = * }"
+      MetricTransformations: 
+        - 
+          MetricValue: "$.Total_game_servers"
+          MetricNamespace: "Scaler"
+          MetricName: "TotalGameServers"
+  PercentageAvailable: 
+    Type: AWS::Logs::MetricFilter
+    Properties: 
+      LogGroupName:
+        !Ref ScalingFunctionLogGroup
+      FilterPattern: "{ $.Percentage_available = * }"
+      MetricTransformations: 
+        - 
+          MetricValue: "$.Percentage_available"
+          MetricNamespace: "Scaler"
+          MetricName: "PercentageAvailable"
+
+  # API for Frontend functionality
+  FrontEndAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      # Authenticate users with IAM (Cognito identities)
+      Auth:
+        DefaultAuthorizer: AWS_IAM
+        InvokeRole: NONE #Using the Lambda role instead of caller
+
+  # Scheduled Lambda function to start new game server Fargate tasks whenever we don't enough excess capacity
+  ScalingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: scaler.lambda_handler
+      Runtime: python3.7
+      MemorySize: 1024
+      ReservedConcurrentExecutions: 1 # We always want exactly one copy of this function running at maximum
+      EventInvokeConfig:
+        MaximumEventAgeInSeconds: 60 # Don't keep events in queue for long.
+        MaximumRetryAttempts: 1 # Sometimes the execution of the previous function can overlap so one retry makes sense
+      # Environment variables from other stacks to access the resources
+      Environment:
+        Variables:
+          REDIS_ENDPOINT:
+            Fn::ImportValue:
+                !Sub "${RedisResourcesStackName}:ElastiCacheAddress"
+          FARGATE_CLUSTER_NAME: 
+            Fn::ImportValue:
+                  !Sub "${ECSResourcesStackName}:ClusterName"
+          SUBNET_1:
+            Fn::ImportValue:
+              Fn::Sub: ${ECSResourcesStackName}:PublicSubnetOne
+          SUBNET_2:
+            Fn::ImportValue:
+              Fn::Sub: ${ECSResourcesStackName}:PublicSubnetTwo
+          SECURITY_GROUP:
+            Fn::ImportValue:
+                  !Sub "${ECSResourcesStackName}:FargateContainerSecurityGroup"
+      # We will run this in private subnets to access Redis
+      VpcConfig:
+        SecurityGroupIds: 
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:InternalSecurityGroup"
+        SubnetIds: 
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:PrivateSubnetOne"
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:PrivateSubnetTwo"
+      Policies:
+        - AWSCloudFormationReadOnlyAccess
+        - AmazonECS_FullAccess
+      Events:
+        CheckScalingNeeds:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 minute)
+
+  # Function called from game servers to update Redis values
+  UpdateGameServerDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: updateredis.lambda_handler
+      Runtime: python3.7
+      MemorySize: 1024
+      Timeout: 15
+      FunctionName: FargateGameServersUpdateGameServerData
+      # Environment variables from other stacks to access the resources
+      Environment:
+        Variables:
+          REDIS_ENDPOINT:
+            Fn::ImportValue:
+                !Sub "${RedisResourcesStackName}:ElastiCacheAddress"
+      # We will run this in private subnets to access Redis
+      VpcConfig:
+        SecurityGroupIds: 
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:InternalSecurityGroup"
+        SubnetIds: 
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:PrivateSubnetOne"
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:PrivateSubnetTwo"
+      Policies:
+        - AWSCloudFormationReadOnlyAccess
+        - AmazonECS_FullAccess
+
+  # Function called from game servers to check if all game servers in Task are done
+  FargateGameServersCheckIfAllContainersInTaskAreDone:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/
+      Handler: checktaskstatus.lambda_handler
+      Runtime: python3.7
+      MemorySize: 1024
+      Timeout: 15
+      FunctionName: FargateGameServersCheckIfAllContainersInTaskAreDone
+      # Environment variables from other stacks to access the resources
+      Environment:
+        Variables:
+          REDIS_ENDPOINT:
+            Fn::ImportValue:
+                !Sub "${RedisResourcesStackName}:ElastiCacheAddress"
+      # We will run this in private subnets to access Redis
+      VpcConfig:
+        SecurityGroupIds: 
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:InternalSecurityGroup"
+        SubnetIds: 
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:PrivateSubnetOne"
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:PrivateSubnetTwo"
+      Policies:
+        - AWSCloudFormationReadOnlyAccess
+        - AmazonECS_FullAccess
+
+  RequestGameSession:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: functions/
+      Handler: requestgamesession.lambda_handler
+      Runtime: python3.7
+      MemorySize: 1024
+      Timeout: 15
+      Policies:
+        - AWSCloudFormationReadOnlyAccess
+      # Environment variables from other stacks to access the resources
+      Environment:
+        Variables:
+          REDIS_ENDPOINT:
+            Fn::ImportValue:
+                !Sub "${RedisResourcesStackName}:ElastiCacheAddress"
+      # We will run this in private subnets to access Redis
+      VpcConfig:
+        SecurityGroupIds: 
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:InternalSecurityGroup"
+        SubnetIds: 
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:PrivateSubnetOne"
+          - Fn::ImportValue:
+              !Sub "${ECSResourcesStackName}:PrivateSubnetTwo"
+      Events:
+        GetGameSession:
+          Type: Api
+          Properties:
+            RestApiId: !Ref FrontEndAPI
+            Path: /requestgamesession
+            Method: get
+
+Outputs:
+  ScalingFunction:
+    Description: "Hello World Lambda Function ARN"
+    Value: !GetAtt ScalingFunction.Arn
+  ScalingFunctionIamRole:
+    Description: "Implicit IAM Role created for Hello World function"
+    Value: !GetAtt ScalingFunction.Arn
+  FrontEndAPI:
+    Description: "API Gateway endpoint URL for Prod stage for FrontEndAPI"
+    Value: !Sub "https://${FrontEndAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  FrontEndApiArn:
+    Description: "The Execute ARN for the Cognito Role Permissions"
+    Value: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${FrontEndAPI}/*/*/*"
+    Export:
+      Name: !Sub ${AWS::StackName}:FrontEndApiArn

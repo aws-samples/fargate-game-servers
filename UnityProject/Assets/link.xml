@@ -1,0 +1,8 @@
+<linker>
+       <assembly fullname="AWSSDK.Core" preserve="all"/>
+       <assembly fullname="AWSSDK.AWSSDK.CognitoIdentity" preserve="all"/>
+       <assembly fullname="AWSSDK.CognitoIdentityProvider" preserve="all"/>
+       <assembly fullname="AWSSDK.SecurityToken" preserve="all"/>
+       <assembly fullname="AWSSDK.Lambda" preserve="all"/>
+        <assembly fullname="Newtonsoft.Json" preserve="all"/>
+</linker>

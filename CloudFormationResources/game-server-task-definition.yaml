@@ -1,0 +1,274 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: A stack for deploying the task definition to be used by the scaler to start game servers
+
+Parameters:
+  ECSResourcesStackName: 
+      Type: String
+      Default: "fargate-game-servers-ecs-resources"
+      Description: Name of the stack for the ECS resources to import
+  Image: 
+    Type: String
+    Description: The url of the image to be used in the Task definition
+  GameServerPorts: 
+    Description: "Comma-delimited list of the 10 game servers ports used by individual containers"
+    Type: CommaDelimitedList
+    Default: "1935,1936,1937,1938,1939,1940,1941,1942,1943,1944"
+
+Resources:
+  GameServerLogGroup: 
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      RetentionInDays: 7
+      LogGroupName: "fargate-game-servers"
+
+  GameServerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: / 
+      Policies:
+        - PolicyName: AmazonGameServerECSTaskRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                # Allow Lambda invocation to access backend Lambda services
+                - 'lambda:InvokeFunction'
+              Resource: '*'
+
+  GameServerTaskDefinition: 
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      RequiresCompatibilities:
+        - "FARGATE"
+      NetworkMode: awsvpc
+      Cpu: 1024
+      Memory: 2048
+      TaskRoleArn: !Ref GameServerTaskRole
+      ExecutionRoleArn:
+        Fn::ImportValue:
+          !Sub "${ECSResourcesStackName}:ECSTaskExecutionRole"
+      # 10 game servers per Task
+      ContainerDefinitions: 
+        - 
+          Name: "GameServer1"
+          Image: !Ref Image
+          Environment:
+          - Name: PORT
+            Value: !Select [ 0, !Ref GameServerPorts ]
+          - Name: CONTAINERNAME
+            Value: "container1"
+          Cpu: 102
+          PortMappings: 
+            - 
+              ContainerPort: !Select [ 0, !Ref GameServerPorts ]
+              HostPort: !Select [ 0, !Ref GameServerPorts ]
+          Memory: 204
+          Essential: true
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              "awslogs-group": "fargate-game-servers"
+              "awslogs-region": !Ref AWS::Region
+              "awslogs-stream-prefix": "ecs"
+        - 
+          Name: "GameServer2"
+          Image: !Ref Image
+          Environment:
+          - Name: PORT
+            Value: !Select [ 1, !Ref GameServerPorts ]
+          - Name: CONTAINERNAME
+            Value: "container2"
+          Cpu: 102
+          PortMappings: 
+            - 
+              ContainerPort: !Select [ 1, !Ref GameServerPorts ]
+              HostPort: !Select [ 1, !Ref GameServerPorts ]
+          Memory: 204
+          Essential: true
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              "awslogs-group": "fargate-game-servers"
+              "awslogs-region": !Ref AWS::Region
+              "awslogs-stream-prefix": "ecs"
+        - 
+          Name: "GameServer3"
+          Image: !Ref Image
+          Environment:
+          - Name: PORT
+            Value: !Select [ 2, !Ref GameServerPorts ]
+          - Name: CONTAINERNAME
+            Value: "container3"
+          Cpu: 102
+          PortMappings: 
+            - 
+              ContainerPort: !Select [ 2, !Ref GameServerPorts ]
+              HostPort: !Select [ 2, !Ref GameServerPorts ]
+          Memory: 204
+          Essential: true
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              "awslogs-group": "fargate-game-servers"
+              "awslogs-region": !Ref AWS::Region
+              "awslogs-stream-prefix": "ecs"
+        - 
+          Name: "GameServer4"
+          Image: !Ref Image
+          Environment:
+          - Name: PORT
+            Value: !Select [ 3, !Ref GameServerPorts ]
+          - Name: CONTAINERNAME
+            Value: "container4"
+          Cpu: 102
+          PortMappings: 
+            - 
+              ContainerPort: !Select [ 3, !Ref GameServerPorts ]
+              HostPort: !Select [ 3, !Ref GameServerPorts ]
+          Memory: 204
+          Essential: true
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              "awslogs-group": "fargate-game-servers"
+              "awslogs-region": !Ref AWS::Region
+              "awslogs-stream-prefix": "ecs"
+        - 
+          Name: "GameServer5"
+          Image: !Ref Image
+          Environment:
+          - Name: PORT
+            Value: !Select [ 4, !Ref GameServerPorts ]
+          - Name: CONTAINERNAME
+            Value: "container5"
+          Cpu: 102
+          PortMappings: 
+            - 
+              ContainerPort: !Select [ 4, !Ref GameServerPorts ]
+              HostPort: !Select [ 4, !Ref GameServerPorts ]
+          Memory: 204
+          Essential: true
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              "awslogs-group": "fargate-game-servers"
+              "awslogs-region": !Ref AWS::Region
+              "awslogs-stream-prefix": "ecs"
+        - 
+          Name: "GameServer6"
+          Image: !Ref Image
+          Environment:
+          - Name: PORT
+            Value: !Select [ 5, !Ref GameServerPorts ]
+          - Name: CONTAINERNAME
+            Value: "container6"
+          Cpu: 102
+          PortMappings: 
+            - 
+              ContainerPort: !Select [ 5, !Ref GameServerPorts ]
+              HostPort: !Select [ 5, !Ref GameServerPorts ]
+          Memory: 204
+          Essential: true
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              "awslogs-group": "fargate-game-servers"
+              "awslogs-region": !Ref AWS::Region
+              "awslogs-stream-prefix": "ecs"
+        - 
+          Name: "GameServer7"
+          Image: !Ref Image
+          Environment:
+          - Name: PORT
+            Value: !Select [ 6, !Ref GameServerPorts ]
+          - Name: CONTAINERNAME
+            Value: "container7"
+          Cpu: 102
+          PortMappings: 
+            - 
+              ContainerPort: !Select [ 6, !Ref GameServerPorts ]
+              HostPort: !Select [ 6, !Ref GameServerPorts ]
+          Memory: 204
+          Essential: true
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              "awslogs-group": "fargate-game-servers"
+              "awslogs-region": !Ref AWS::Region
+              "awslogs-stream-prefix": "ecs"
+        - 
+          Name: "GameServer8"
+          Image: !Ref Image
+          Environment:
+          - Name: PORT
+            Value: !Select [ 7, !Ref GameServerPorts ]
+          - Name: CONTAINERNAME
+            Value: "container8"
+          Cpu: 102
+          PortMappings: 
+            - 
+              ContainerPort: !Select [ 7, !Ref GameServerPorts ]
+              HostPort: !Select [ 7, !Ref GameServerPorts ]
+          Memory: 204
+          Essential: true
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              "awslogs-group": "fargate-game-servers"
+              "awslogs-region": !Ref AWS::Region
+              "awslogs-stream-prefix": "ecs"
+        - 
+          Name: "GameServer9"
+          Image: !Ref Image
+          Environment:
+          - Name: PORT
+            Value: !Select [ 8, !Ref GameServerPorts ]
+          - Name: CONTAINERNAME
+            Value: "container9"
+          Cpu: 102
+          PortMappings: 
+            - 
+              ContainerPort: !Select [ 8, !Ref GameServerPorts ]
+              HostPort: !Select [ 8, !Ref GameServerPorts ]
+          Memory: 204
+          Essential: true
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              "awslogs-group": "fargate-game-servers"
+              "awslogs-region": !Ref AWS::Region
+              "awslogs-stream-prefix": "ecs"
+        - 
+          Name: "GameServer10"
+          Image: !Ref Image
+          Environment:
+          - Name: PORT
+            Value: !Select [ 9, !Ref GameServerPorts ]
+          - Name: CONTAINERNAME
+            Value: "container10"
+          Cpu: 102
+          PortMappings: 
+            - 
+              ContainerPort: !Select [ 9, !Ref GameServerPorts ]
+              HostPort: !Select [ 9, !Ref GameServerPorts ]
+          Memory: 204
+          Essential: true
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              "awslogs-group": "fargate-game-servers"
+              "awslogs-region": !Ref AWS::Region
+              "awslogs-stream-prefix": "ecs"                                                                                                                
+
+Outputs:
+  TaskDefinition:
+    Description: The task definition resource
+    Value: !Ref GameServerTaskDefinition
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'TaskDefinition' ] ]

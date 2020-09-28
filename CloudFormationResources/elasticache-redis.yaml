@@ -1,0 +1,106 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: ElastiCache Redis Cluster
+
+Parameters:
+
+  # ElastiCache stack creation prerequisite:  First create a VPC stack - see README for more info
+  NetworkStackName:
+    Description: Active CloudFormation stack containing VPC resources
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9]*$"
+    Default: fargate-game-servers-ecs-resources
+
+  ClusterName:
+    Description: Custom name of the cluster. Auto generated if you don't supply your own.
+    Type: String
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9]*$"
+    Default: GameCluster
+
+  CacheNodeType:
+    Description: Cache node instance class, e.g. cache.t2.micro(free tier). See https://docs.aws.amazon.com/AmazonElastiCache/latest/UserGuide/CacheNodes.SelectSize.html
+    Type: String
+    Default: cache.t2.micro
+    ConstraintDescription: Node instance class not supported
+    AllowedValues:
+      - cache.t2.micro
+      - cache.t2.small
+      - cache.t2.medium
+      - cache.m4.large
+      - cache.m4.xlarge
+      - cache.m4.2xlarge
+      - cache.m4.4xlarge
+      - cache.m4.10xlarge
+      - cache.r4.large
+      - cache.r4.xlarge
+      - cache.r4.2xlarge
+      - cache.r4.4xlarge
+      - cache.r4.8xlarge
+      - cache.r4.16xlarge
+
+  AutoMinorVersionUpgrade:
+    Description: Whether or not minor version upgrades to the cache engine should be applied automatically during the maintenance window.
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+
+Resources:
+
+  SubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Cache Subnet Group
+      SubnetIds:
+        - Fn::ImportValue: !Sub ${NetworkStackName}:PrivateSubnetOne
+        - Fn::ImportValue: !Sub ${NetworkStackName}:PrivateSubnetTwo
+
+  ElastiCacheCluster:
+    Type: AWS::ElastiCache::CacheCluster
+    Properties:
+      AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
+      Engine: redis
+      CacheNodeType: !Ref CacheNodeType
+      ClusterName : !Ref ClusterName
+      NumCacheNodes: 1
+      CacheSubnetGroupName: !Ref SubnetGroup
+      VpcSecurityGroupIds:
+        - Fn::ImportValue: !Sub ${NetworkStackName}:InternalSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+
+Outputs:
+
+  ElastiCacheStackName:
+    Description: ElastiCache Stack Name
+    Value: !Ref AWS::StackName
+    Export:
+      Name: !Sub ${AWS::StackName}:ElastiCacheName
+
+  ElastiCacheClusterArn:
+    Description: ElastiCache Cluster Arn
+    Value: !Sub arn:aws:elasticache:${AWS::Region}:${AWS::AccountId}:cluster/${ElastiCacheCluster}
+    Export:
+      Name: !Sub ${AWS::StackName}:ElastiCacheClusterArn
+
+  ElastiCacheClusterId:
+    Description: ElastiCache Cluster ID
+    Value: !Ref ElastiCacheCluster
+    Export:
+      Name: !Sub ${AWS::StackName}:ElastiCacheClusterID
+
+  ElastiCacheAddress:
+    Description: ElastiCache endpoint address
+    Value: !GetAtt ElastiCacheCluster.RedisEndpoint.Address
+    Export:
+      Name: !Sub ${AWS::StackName}:ElastiCacheAddress
+
+  ElastiCachePort:
+    Description: ElastiCache port
+    Value: 6379
+    Export:
+      Name: !Sub ${AWS::StackName}:ElastiCachePort
