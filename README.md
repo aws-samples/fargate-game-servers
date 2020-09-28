@@ -190,7 +190,7 @@ The client will receive the IP and Port of the game server or an error message i
 
 ## Game Server
 
-The game server is developed with Unity in the same project (`UnityProject`) as the client. Using the Scripting Define Symbol `SERVER` will define it as a server build. The server is built as part of deploying the Task definition by creating a Docker image of the server locally (using the latest build in LinuxServerBuild) and uploading that to an ECR repository. See `LinuxServerBuild/Dockerfile` for the definition of the Docker image.
+The game server is developed with Unity in the same project (`UnityProject`) as the client. Using the Scripting Define Symbol `SERVER` will define it as a server build. The server is built as part of deploying the Task definition by creating a Docker image of the server locally (using the latest build in LinuxServerBuild) and uploading that to an ECR repository. See `LinuxServerBuild/Dockerfile` for the definition of the Docker image. It uses an Ubuntu base image but you could replace this with more lightweight options as well.
 
 Key Server functionality:
  * Starts a TcpListener and starts accepting clients
