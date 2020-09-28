@@ -113,7 +113,7 @@ The scaling speed should be sufficient to most needs and if you run the Tasks in
     * Make sure you have the SAM CLI installed
     * The template uses Python 3.7 for the Lambda functions so **you will need Python 3.7 installed locally as well**. [Download Python 3.7 here](https://www.python.org/downloads/release/python-379/).
     * Run the `BackendServices/deploy.sh` script to deploy the backend Services
-    * You should see the Scaler function starting quickly after the Stack is deployed to run every minute and 2 Tasks being started in the ECS Cluster, each hosting 10 game server containers
+    * You should see the Scaler function starting quickly after the Stack is deployed to run every minute and 3-4 Tasks being started in the ECS Cluster, each hosting 10 game server containers
 7. **Set the API endpoint to the Unity Project**
     * Set the value of `static string apiEndpoint` to the endpoint created by the backend deployment in `UnityProject/Assets/Scripts/Client/MatchmakingClient.cs`
     * You can find this endpoint from the `fargate-game-servers-backend` Stack Outputs in CloudFormation or from the API Gateway console (make sure to have the `/Prod/` in the url)
