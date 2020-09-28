@@ -58,7 +58,7 @@ While the configuration for the ElastiCache Redis Cluster is sufficient for a la
 
 **Fargate Task Scaling and Throttling**
 
-You can start 10 new Tasks per one request to the ECS API and the these requests will throttle as well allowing around 1 Task/second rate of starting Tasks (with burst capacity to 10/s). This solution can start around 600 game server tasks per minute with the default service limits as each Task hosts 10 game server containers.
+You can start 10 new Tasks per one request to the ECS API and the these requests will throttle as well allowing around 1 Task/second rate of starting Tasks (with burst capacity to 10/s). This solution can start around 600 game servers (60 Tasks) per minute with the default service limits as each Task hosts 10 game server containers.
 
 The scaling speed should be sufficient to most needs and if you run the Tasks in multiple Regions, each have their own similar scaling capabilities. In case you need even faster scaling / more available game servers you can:
 
@@ -215,7 +215,7 @@ The client will
  * Request an identity from Cognito Identity Pool by using AWS SDK (`Scripts/Client/Client.cs`)
  * Once the credentials are received, sign a request to API Gateway to request a game session (`Scripts/Client/MatchmakingClient.cs`)
  * Once the response to the game session has been received, connect to the game server with the given public IP and port
- * Start sending and receiving updates using TCPCLient
+ * Start sending and receiving updates using a TCPClient
 
 # Cleaning Up Resources
 
