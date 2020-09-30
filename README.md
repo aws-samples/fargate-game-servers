@@ -1,6 +1,5 @@
-# Game Server Hosting on ECS Fargate
+# Game Server Hosting on AWS Fargate
 
-- [Game Server Hosting on ECS Fargate](#game-server-hosting-on-ecs-fargate)
 - [Key Features](#key-features)
 - [Contents](#contents)
 - [Architecture Diagram](#architecture-diagram)
@@ -19,7 +18,7 @@
 - [Cleaning Up Resources](#cleaning-up-resources)
 - [License](#license)
 
-This repository contains an example solution on how to scale a fleet of Game Servers on ECS Fargate and route players to them using a Serverless backend. Game Server data is stored in ElastiCache Redis. All resources are deployed with Infrastructure as Code using CloudFormation, Serverless Application Model, Docker and bash/powershell scripts. By leveraging AWS Fargate for your game servers you don't need to manage the underlying virtual machines.
+This repository contains an example solution on how to scale a fleet of game servers on AWS Fargate on Elastic Container Service and route players to game sessions using a Serverless backend. Game Server data is stored in ElastiCache Redis. All resources are deployed with Infrastructure as Code using CloudFormation, Serverless Application Model, Docker and bash/powershell scripts. By leveraging AWS Fargate for your game servers you don't need to manage the underlying virtual machines.
 
 # Key Features
 * Scales ECS Fargate Tasks based on need using a defined percentage of available game servers as the metric
