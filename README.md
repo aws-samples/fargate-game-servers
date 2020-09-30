@@ -6,7 +6,8 @@
 - [Architecture Diagram](#architecture-diagram)
 - [Important Notes on Service Limits and Scaling](#important-notes-on-service-limits-and-scaling)
 - [Preliminary Setup](#preliminary-setup)
-- [Deployment](#deployment)
+- [Deployment With Bash Scripts](#deployment-with-bash-scripts)
+- [Deployment With Powershell Scripts](#deployment-with-powershell-scripts)
 - [Implementation Overview](#implementation-overview)
   * [Infrastructure](#infrastructure)
   * [Serverless Backend Services](#serverless-backend-services)
@@ -18,7 +19,7 @@
 - [Cleaning Up Resources](#cleaning-up-resources)
 - [License](#license)
 
-This repository contains an example solution on how to scale a fleet of Game Servers on ECS Fargate and route players to them using a Serverless backend. Game Server data is stored in ElastiCache Redis. All resources are deployed with Infrastructure as Code using CloudFormation, Serverless Application Model, Docker and shell scripts.
+This repository contains an example solution on how to scale a fleet of Game Servers on ECS Fargate and route players to them using a Serverless backend. Game Server data is stored in ElastiCache Redis. All resources are deployed with Infrastructure as Code using CloudFormation, Serverless Application Model, Docker and bash/powershell scripts.
 
 # Key Features
 * Scales ECS Fargate Tasks based on need using a defined percentage of available game servers as the metric
@@ -27,6 +28,7 @@ This repository contains an example solution on how to scale a fleet of Game Ser
 * Uses CloudFormation to deploy all infrastructure resources
 * Uses Cognito for player identities. Requests against the API are signed with Cognito credentials
 * Uses Unity on both server and client side. Unity server build is deployed as a Linux Docker container
+* Supports development and deployment on both Windows and MacOS
 
 The client/server Unity project is a simple "game" where 2 players join the same session and move around with their 3D characters. The movements are sent through the server to other players and the characters created and removed as players join and leave.
 
@@ -85,7 +87,7 @@ The scaling speed should be sufficient to most needs and if you run the Tasks in
 5. **Select deployment Region**
     * The solution can be deployed to any Region supporting ECS, Fargate, Lambda, API Gateway and Cognito. See [The Regional Table](https://aws.amazon.com/about-aws/global-infrastructure/regional-product-services/) to validate your selected Region supports these services. You will need to configure the Region during the deployment.
 
-# Deployment
+# Deployment With Bash Scripts
 
 1. **Set up Configuration Variables**
     * Open `configuration.sh` in your favourite text editor
@@ -126,6 +128,51 @@ The scaling speed should be sufficient to most needs and if you run the Tasks in
     * Set the the Scripting Define Symbol `CLIENT` in the *Player Settings* in the Unity Project (File -> "Build Settings" -> "Player settings" → "Player" → "Other Settings" → "Scripting Define Symbol" → Replace completely with "CLIENT")
     * Open the scene "GameWorld" in Scenes/GameWorld
     * Open Build Settings (File -> Build Settings) in Unity and set target platform to `Mac OSX` (or whatever the platform you are using) and **uncheck** the box `Server Build`
+    * Build the client to any folder (Click "Build", select your folder and click "Save")
+    * You can run two clients by running one in the Unity Editor and one with the created build. This way the clients will get different Cognito identities. If you run multiple copies of the build, they will have the same identity. In this solution is doesn't matter but if your backend starts using the identity for player data, then it might.
+    * You should see the clients connected to the same game session and see the movements synchronized between clients.
+
+# Deployment With Powershell Scripts
+
+1. **Set up Configuration Variables**
+    * Open `configuration.xml` in your favourite text editor
+    * Set the `Region` variable to your desired region
+    * Set the `AccountID` to your AWS Account ID (12 digits without dashes)
+    * Set the `DeploymentBucketName` to a **globally unique** name for the code deployment bucket
+2. **Deploy the Infrastructure resources**
+    * Run `CloudFormationResources/deploy-vpc-ecs-and-redis-resources.ps1` to deploy. This will take some time as it creates all VPC resources as well as the ElastiCache Redis cluster. The script will wait for the Stacks to be created and you can also view the status from CloudFormation Management Console.
+3. **Set the RegionEndpoint to Server.cs**
+    * Open `UnityProject/Assets/Scripts/Server/Server.cs` in your favourite editor
+    * Set the `RegionEndpoint regionEndpoint` to your selected Region
+4. **Build the server**
+    * Open Unity Hub, add the UnityProject and open it (Unity 2019.2.16 or higher recommended)
+    * In Unity go to "File -> Build Settings"
+    * Go to "Player Settings" and find the Scripting Define Symbols ("Player settings" -> "Player" -> "Other Settings" -> "Scripting Define Symbol")
+    * Replace the the Scripting Define Symbol with `SERVER`. Remember to press Enter after changing the value. C# scripts will use this directive to include server code and exclude client code
+    * Close Player Settings and return to Build Settings
+    * Switch the target platform to `Linux`. If you don't have it available, you need to install Linux platform support in Unity Hub.
+    * Check the box `Server Build`
+    * Build the project to the `LinuxServerBuild` folder (Click "Build" and in new window choose "LinuxServerBuild" folder, enter "FargateExampleServer" in "Save as" field and click "Save"). **NOTE**: It's important to give the exact name `FargateExampleServer` for the build as the Dockerfile uses this.
+5. **Build Docker Image and Deploy Task Configuration**
+    * Make sure you have Docker installed and running
+    * Run `CloudFormationResources/deploy-game-server-and-update-task-definition.ps1` to build the docker image, create an ECR repository and upload the image and deploy the Task Definition
+6. **Deploy the Backend Services with SAM**
+    * Make sure you have the SAM CLI installed
+    * The template uses Python 3.7 for the Lambda functions so **you will need Python 3.7 installed locally as well**. [Download Python 3.7 here](https://www.python.org/downloads/release/python-379/).
+    * Run the `BackendServices/deploy.ps1` script to deploy the backend Services. This first deployment will take some time as the networking interfaces to the VPC are being deployed as well.
+    * You should see the Scaler function starting quickly after the Stack is deployed to run every minute and 3-4 Tasks being started in the ECS Cluster, each hosting 10 game server containers
+7. **Set the API endpoint to the Unity Project**
+    * Set the value of `static string apiEndpoint` to the endpoint created by the backend deployment in `UnityProject/Assets/Scripts/Client/MatchmakingClient.cs`
+    * You can find this endpoint from the `fargate-game-servers-backend` Stack Outputs in CloudFormation or from the API Gateway console (make sure to have the `/Prod/` in the url)
+8. **Deploy Cognito Resources**
+    * Run `CloudFormationResources/deploy-cognito-resources.ps1` to deploy
+9. **Set the Cognito Identity Pool configuration**
+    * Set the value of `static string identityPoolID` to the identity pool created by the Cognito Resources deployment in `UnityProject/Assets/Scripts/Client/MatchmakingClient.cs`. (You can find the ARN of the Identity Pool in the CloudFormation stack `fargate-game-servers-cognito`, in IAM console or as output of Step 8)
+    * Set the value of `public static string regionString` and `public static Amazon.RegionEndpoint region` to the values of your selected region
+10. **Build and run two clients**
+    * Set the the Scripting Define Symbol `CLIENT` in the *Player Settings* in the Unity Project (File -> "Build Settings" -> "Player settings" → "Player" → "Other Settings" → "Scripting Define Symbol" → Replace completely with "CLIENT")
+    * Open the scene "GameWorld" in Scenes/GameWorld
+    * Open Build Settings (File -> Build Settings) in Unity and set target platform to `Windows` and **uncheck** the box `Server Build`
     * Build the client to any folder (Click "Build", select your folder and click "Save")
     * You can run two clients by running one in the Unity Editor and one with the created build. This way the clients will get different Cognito identities. If you run multiple copies of the build, they will have the same identity. In this solution is doesn't matter but if your backend starts using the identity for player data, then it might.
     * You should see the clients connected to the same game session and see the movements synchronized between clients.
