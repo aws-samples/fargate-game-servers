@@ -19,7 +19,7 @@
 - [Cleaning Up Resources](#cleaning-up-resources)
 - [License](#license)
 
-This repository contains an example solution on how to scale a fleet of Game Servers on ECS Fargate and route players to them using a Serverless backend. Game Server data is stored in ElastiCache Redis. All resources are deployed with Infrastructure as Code using CloudFormation, Serverless Application Model, Docker and bash/powershell scripts.
+This repository contains an example solution on how to scale a fleet of Game Servers on ECS Fargate and route players to them using a Serverless backend. Game Server data is stored in ElastiCache Redis. All resources are deployed with Infrastructure as Code using CloudFormation, Serverless Application Model, Docker and bash/powershell scripts. By leveraging AWS Fargate for your game servers you don't need to manage the underlying virtual machines.
 
 # Key Features
 * Scales ECS Fargate Tasks based on need using a defined percentage of available game servers as the metric
@@ -202,7 +202,7 @@ The backend CloudFormation Stack will also configure **CloudWatch Logs Metric Fi
 
 ### Scaler Functionality Details
 
-The Scaler Lambda function will fetch the keys of all game servers (stored as HSETs in Redis). It will then determine what percentage of the game servers are available and in case this percentage is below the defined threshold, it will start new Tasks. Each new Task hosts 10 game server containers so the total amount of required game servers is divided by 10 to get the Task count. Tasks are started in batches of 3 Tasks to make sure we don't reach the throttling limit of the API but still make maximum use of it. The Lambda function will check Redis every 2 seconds resulting in a maximum of 3 Tasks per 2 seconds being started which based on tests doesn't introduce throttling. This gives a theoretical maximum of around 900 game servers started per second.
+The Scaler Lambda function will fetch the keys of all game servers (stored as HSETs in Redis). It will then determine what percentage of the game servers are available and in case this percentage is below the defined threshold, it will start new Tasks. Each new Task hosts 10 game server containers so the total amount of required game servers is divided by 10 to get the Task count. Tasks are started in batches of 3 Tasks to make sure we don't reach the throttling limit of the API but still make maximum use of it. The Lambda function will check Redis every 2 seconds resulting in a maximum of 3 Tasks per 2 seconds being started which based on tests doesn't introduce throttling. This gives a maximum of around 600 game servers started per minute.
 
 **Note**: If you change the amount of containers per Task, you need to update this to `BackendServices/functions/scaler.py` as well. Use the variables defined in the beginning of the script for minimum amount of game servers as well as the minimum percentage of available game servers.
 
