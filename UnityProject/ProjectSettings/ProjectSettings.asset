@@ -568,8 +568,8 @@ PlayerSettings:
   webGLThreadsSupport: 0
   webGLWasmStreaming: 0
   scriptingDefineSymbols:
-    1: CLIENT
-    4: CLIENT
+    1: SERVER
+    4: SERVER
   platformArchitecture: {}
   scriptingBackend:
     Standalone: 0

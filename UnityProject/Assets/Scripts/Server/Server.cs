@@ -44,12 +44,18 @@ public class TaskStatusData
 
 public class Server : MonoBehaviour
 {
+    public GameObject playerPrefab;
+
     // TODO: Update this to your selected Region
     RegionEndpoint regionEndpoint = RegionEndpoint.USEast1;
 
     // How many times the game server is reused for sessions. If you expect very little memory leaks or other issues/crashes, it could be higher
     public static int totalGameSessionsToHost = 3;
     public static int hostedGameSessions = 0;
+
+    // List of players
+    public List<NetworkPlayer> players = new List<NetworkPlayer>();
+    public int rollingPlayerId = 0; //Rolling player id that is used to give new players an ID when connecting
 
     // For testing we have maximum of 2 players
     public static int maxPlayers = 2;
@@ -78,6 +84,45 @@ public class Server : MonoBehaviour
     // Defines if we're waiting to be terminated (maximum amount of game sessions hosted)
     public bool waitingForTermination = false;
     float waitingForTerminateCounter = 5.0f; //We start by checking immediately so set to full 5 seconds
+
+    // Helper function to check if a player exists in the enemy list already
+    private bool PlayerExists(int clientId)
+    {
+        foreach (NetworkPlayer player in players)
+        {
+            if (player.GetPlayerId() == clientId)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Helper function to find a player from the enemy list
+    private NetworkPlayer GetPlayer(int clientId)
+    {
+        foreach (NetworkPlayer player in players)
+        {
+            if (player.GetPlayerId() == clientId)
+            {
+                return player;
+            }
+        }
+        return null;
+    }
+
+    public void RemovePlayer(int clientId)
+    {
+        foreach (NetworkPlayer player in players)
+        {
+            if (player.GetPlayerId() == clientId)
+            {
+                player.DeleteGameObject();
+                players.Remove(player);
+                return;
+            }
+        }
+    }
 
     public void StartGame()
     {
@@ -156,68 +201,46 @@ public class Server : MonoBehaviour
         }
     }
 
-    // Update is called once per frame
-    void Update()
+    // FixedUpdate is called 30 times per second (configured in Project Settings -> Time -> Fixed TimeStep).
+    // This is the interval we're running the simulation and processing messages on the server
+    void FixedUpdate()
     {
         // 1. If we're waiting for termination, only check if all containers in this Task are done
         if (this.waitingForTermination)
         {
-            this.waitingForTerminateCounter += Time.deltaTime;
-            // Check the status every 5 seconds
-            if (waitingForTerminateCounter > 5.0f)
-            {
-                this.waitingForTerminateCounter = 0.0f;
-
-                Debug.Log("Waiting for other servers in the Task to finish...");
-
-                var lambdaConfig = new AmazonLambdaConfig() { RegionEndpoint = this.regionEndpoint };
-                var lambdaClient = new Amazon.Lambda.AmazonLambdaClient(lambdaConfig);
-
-                // Call Lambda function to check if we should terminate
-                var taskStatusRequestData = new TaskStatusData();
-                taskStatusRequestData.taskArn = this.taskDataArn;
-                var request = new Amazon.Lambda.Model.InvokeRequest()
-                {
-                    FunctionName = "FargateGameServersCheckIfAllContainersInTaskAreDone",
-                    Payload = JsonConvert.SerializeObject(taskStatusRequestData),
-                    InvocationType = InvocationType.RequestResponse
-                };
-
-                // As we are not doing anything else on the server anymore, we can just wait for the invoke response
-                var invokeResponse = lambdaClient.InvokeAsync(request);
-                invokeResponse.Wait();
-                invokeResponse.Result.Payload.Position = 0;
-                var sr = new StreamReader(invokeResponse.Result.Payload);
-                var responseString = sr.ReadToEnd();
-
-                Debug.Log("Got response: " + responseString);
-
-                // Try catching to boolean, if it was a failure, this will also result in false
-                var allServersInTaskDone = false;
-                bool.TryParse(responseString, out allServersInTaskDone);
-
-                if (allServersInTaskDone)
-                {
-                    Debug.Log("All servers in the Task done running full amount of sessions --> Terminate");
-                    Application.Quit();
-                }
-            }
+            this.HandleWaitingForTermination();
             return;
         }
 
         // 2. Otherwise run regular update
 
+        // Update the Network server to check client status and get messages
         server.Update();
 
-        // Go through any messages to process (on the game world)
-        foreach (SimpleMessage msg in messagesToProcess)
+        // Process any messages we received
+        this.ProcessMessages();
+
+        // Move players based on latest input and update player states to clients
+        for (int i = 0; i < this.players.Count; i++)
         {
-            // NOTE: We should spawn players and set positions also on server side here and validate actions. For now we just pass this data to clients
+            var player = this.players[i];
+            // Move
+            player.Move();
+
+            // Send state if changed
+            var positionMessage = player.GetPositionMessage();
+            if (positionMessage != null)
+            {
+                positionMessage.clientId = player.GetPlayerId();
+                this.server.TransmitMessage(positionMessage, player.GetPlayerId());
+                //Send to the player him/herself
+                positionMessage.messageType = MessageType.PositionOwn;
+                this.server.SendMessage(player.GetPlayerId(), positionMessage);
+            }
         }
-        messagesToProcess.Clear();
 
         // Update the server state to Redis every 30 seconds with a 60 second expiration. This will also get done when new clients connect
-        this.redisUpdateCounter += Time.deltaTime;
+        this.redisUpdateCounter += Time.fixedDeltaTime;
         if(this.redisUpdateCounter > Server.redisUpdateIntervalSeconds && this.taskDataArnWithContainer != null)
         {
             this.UpdateRedis();
@@ -230,6 +253,115 @@ public class Server : MonoBehaviour
             Debug.Log("New player joined, update Redis");
             this.UpdateRedis();
             this.lastPlayerCount = this.server.GetPlayerCount();
+        }
+    }
+
+    private void ProcessMessages()
+    {
+        // Go through any messages we received to process
+        foreach (SimpleMessage msg in messagesToProcess)
+        {
+            // Spawn player
+            if (msg.messageType == MessageType.Spawn)
+            {
+                Debug.Log("Player spawned: " + msg.float1 + "," + msg.float2 + "," + msg.float3);
+                NetworkPlayer player = new NetworkPlayer(msg.clientId);
+                this.players.Add(player);
+                player.Spawn(msg, this.playerPrefab);
+                player.SetPlayerId(msg.clientId);
+
+                // Send all existing player positions to the newly joined
+                for (int i = 0; i < this.players.Count-1; i++)
+                {
+                    var otherPlayer = this.players[i];
+                    // Send state
+                    var positionMessage = otherPlayer.GetPositionMessage(overrideChangedCheck: true);
+                    if (positionMessage != null)
+                    {
+                        positionMessage.clientId = otherPlayer.GetPlayerId();
+                        this.server.SendMessage(player.GetPlayerId(), positionMessage);
+                    }
+                }
+            }
+
+            // Set player input
+            if (msg.messageType == MessageType.PlayerInput)
+            {
+                // Only handle input if the player exists
+                if (this.PlayerExists(msg.clientId))
+                {
+                    Debug.Log("Player moved: " + msg.float1 + "," + msg.float2 + " ID: " + msg.clientId);
+
+                    if (this.PlayerExists(msg.clientId))
+                    {
+                        var player = this.GetPlayer(msg.clientId);
+                        player.SetInput(msg);
+                    }
+                    else
+                    {
+                        Debug.Log("PLAYER MOVED BUT IS NOT SPAWNED! SPAWN TO RANDOM POS");
+                        Vector3 spawnPos = new Vector3(UnityEngine.Random.Range(-5, 5), 1, UnityEngine.Random.Range(-5, 5));
+                        var quat = Quaternion.identity;
+                        SimpleMessage tmpMsg = new SimpleMessage(MessageType.Spawn);
+                        tmpMsg.SetFloats(spawnPos.x, spawnPos.y, spawnPos.z, quat.x, quat.y, quat.z, quat.w);
+                        tmpMsg.clientId = msg.clientId;
+
+                        NetworkPlayer player = new NetworkPlayer(msg.clientId);
+                        this.players.Add(player);
+                        player.Spawn(tmpMsg, this.playerPrefab);
+                        player.SetPlayerId(msg.clientId);
+                    }
+                }
+                else
+                {
+                    Debug.Log("Player doesn't exists anymore, don't take in input: " + msg.clientId);
+                }
+            }
+        }
+        messagesToProcess.Clear();
+    }
+
+    private void HandleWaitingForTermination()
+    {
+        this.waitingForTerminateCounter += Time.deltaTime;
+        // Check the status every 5 seconds
+        if (waitingForTerminateCounter > 5.0f)
+        {
+            this.waitingForTerminateCounter = 0.0f;
+
+            Debug.Log("Waiting for other servers in the Task to finish...");
+
+            var lambdaConfig = new AmazonLambdaConfig() { RegionEndpoint = this.regionEndpoint };
+            var lambdaClient = new Amazon.Lambda.AmazonLambdaClient(lambdaConfig);
+
+            // Call Lambda function to check if we should terminate
+            var taskStatusRequestData = new TaskStatusData();
+            taskStatusRequestData.taskArn = this.taskDataArn;
+            var request = new Amazon.Lambda.Model.InvokeRequest()
+            {
+                FunctionName = "FargateGameServersCheckIfAllContainersInTaskAreDone",
+                Payload = JsonConvert.SerializeObject(taskStatusRequestData),
+                InvocationType = InvocationType.RequestResponse
+            };
+
+            // As we are not doing anything else on the server anymore, we can just wait for the invoke response
+            var invokeResponse = lambdaClient.InvokeAsync(request);
+            invokeResponse.Wait();
+            invokeResponse.Result.Payload.Position = 0;
+            var sr = new StreamReader(invokeResponse.Result.Payload);
+            var responseString = sr.ReadToEnd();
+
+            Debug.Log("Got response: " + responseString);
+
+            // Try catching to boolean, if it was a failure, this will also result in false
+            var allServersInTaskDone = false;
+            bool.TryParse(responseString, out allServersInTaskDone);
+
+            if (allServersInTaskDone)
+            {
+                Debug.Log("All servers in the Task done running full amount of sessions --> Terminate");
+                Application.Quit();
+            }
         }
     }
 
@@ -294,7 +426,8 @@ public class Server : MonoBehaviour
 public class NetworkServer
 {
 	private TcpListener listener;
-    private List<TcpClient> clients = new List<TcpClient>();
+    // Clients are stored as a dictionary of the TCPCLient and the ClientID
+    private Dictionary<TcpClient, int> clients = new Dictionary<TcpClient,int>();
     private List<TcpClient> readyClients = new List<TcpClient>();
     private List<TcpClient> clientsToRemove = new List<TcpClient>();
 
@@ -320,6 +453,7 @@ public class NetworkServer
         {
             Debug.Log("Restart the Server");
             Server.messagesToProcess = new List<SimpleMessage>(); //Reset messages
+            this.server.players = new List<NetworkPlayer>(); //Reset players
             this.ready = false;
             this.server.UpdateRedis(serverTerminated: false); //Update to redis as not ready while waiting for restart
             SceneManager.LoadScene("GameWorld"); // Reset world to restart everything
@@ -371,7 +505,9 @@ public class NetworkServer
             // We have a maximum of 2 clients per game
             if(this.clients.Count < Server.maxPlayers)
             {
-                this.clients.Add(client);
+                // Add client and give it the Id of the value of rollingPlayerId
+                this.clients.Add(client, this.server.rollingPlayerId);
+                this.server.rollingPlayerId++;
                 return;
             }
             else
@@ -391,27 +527,28 @@ public class NetworkServer
         int playerIdx = 0;
         foreach (var client in this.clients)
 		{
+            var tcpClient = client.Key;
             try
             {
-                if (client == null) continue;
-                if (this.IsSocketConnected(client) == false)
+                if (tcpClient == null) continue;
+                if (this.IsSocketConnected(tcpClient) == false)
                 {
                     System.Console.WriteLine("Client not connected anymore");
-                    this.clientsToRemove.Add(client);
+                    this.clientsToRemove.Add(tcpClient);
                 }
-                var messages = NetworkProtocol.Receive(client);
+                var messages = NetworkProtocol.Receive(tcpClient);
                 foreach(SimpleMessage message in messages)
                 {
                     System.Console.WriteLine("Received message: " + message.message + " type: " + message.messageType);
-                    bool disconnect = HandleMessage(playerIdx, client, message);
+                    bool disconnect = HandleMessage(playerIdx, tcpClient, message);
                     if (disconnect)
-                        this.clientsToRemove.Add(client);
+                        this.clientsToRemove.Add(tcpClient);
                 }
             }
             catch (Exception e)
             {
                 System.Console.WriteLine("Error receiving from a client: " + e.Message);
-                this.clientsToRemove.Add(client);
+                this.clientsToRemove.Add(tcpClient);
             }
             playerIdx++;
 		}
@@ -449,37 +586,84 @@ public class NetworkServer
         // disconnect connections
         foreach (var client in this.clients)
         {
-            this.clientsToRemove.Add(client);
+            this.clientsToRemove.Add(client.Key);
         }
 
         //Reset the client lists
-        this.clients = new List<TcpClient>();
+        this.clients = new Dictionary<TcpClient, int>();
         this.readyClients = new List<TcpClient>();
+        this.server.players = new List<NetworkPlayer>();
 	}
 
+    public void TransmitMessage(SimpleMessage msg, int excludeClient)
+    {
+        // send the same message to all players
+        foreach (var client in this.clients)
+        {
+            //Skip if this is the excluded client
+            if (client.Value == excludeClient)
+            {
+                continue;
+            }
+
+            try
+            {
+                NetworkProtocol.Send(client.Key, msg);
+            }
+            catch (Exception e)
+            {
+                this.clientsToRemove.Add(client.Key);
+            }
+        }
+    }
+
     //Transmit message to multiple clients
-	private void TransmitMessage(SimpleMessage msg, TcpClient excludeClient = null)
+	public void TransmitMessage(SimpleMessage msg, TcpClient excludeClient = null)
 	{
         // send the same message to all players
         foreach (var client in this.clients)
 		{
             //Skip if this is the excluded client
-            if(excludeClient != null && excludeClient == client)
+            if(excludeClient != null && excludeClient == client.Key)
             {
                 continue;
             }
 
 			try
 			{
-				NetworkProtocol.Send(client, msg);
+				NetworkProtocol.Send(client.Key, msg);
 			}
 			catch (Exception e)
 			{
-                this.clientsToRemove.Add(client);
+                this.clientsToRemove.Add(client.Key);
 			}
 		}
     }
 
+    private TcpClient SearchClient(int clientId)
+    {
+        foreach(var client in this.clients)
+        {
+            if(client.Value == clientId)
+            {
+                return client.Key;
+            }
+        }
+        return null;
+    }
+
+    public void SendMessage(int clientId, SimpleMessage msg)
+    {
+        try
+        {
+            TcpClient client = this.SearchClient(clientId);
+            SendMessage(client, msg);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine("Failed to send message to client: " + clientId);
+        }
+    }
     //Send message to single client
     private void SendMessage(TcpClient client, SimpleMessage msg)
     {
@@ -504,12 +688,11 @@ public class NetworkServer
             HandleReady(client);
         else if (msg.messageType == MessageType.Spawn)
             HandleSpawn(client, msg);
-        else if (msg.messageType == MessageType.Position)
-            HandlePos(client, msg);
+        else if (msg.messageType == MessageType.PlayerInput)
+            HandleMove(client, msg);
 
         return false;
     }
-
 
 	private void HandleReady(TcpClient client)
 	{
@@ -525,8 +708,8 @@ public class NetworkServer
 
     private void HandleSpawn(TcpClient client, SimpleMessage message)
     {
-        // Get client id (index in list for now)
-        int clientId = this.clients.IndexOf(client);
+        // Get client id (this is the value in the dictionary where the TCPClient is the key)
+        int clientId = this.clients[client];
 
         System.Console.WriteLine("Player " + clientId + " spawned with coordinates: " + message.float1 + "," + message.float2 + "," + message.float3);
 
@@ -535,34 +718,26 @@ public class NetworkServer
 
         // Add to list to create the gameobject instance on the server
         Server.messagesToProcess.Add(message);
-
-        //Inform the other clients about the player pos
-        this.TransmitMessage(message, excludeClient: client);
-
     }
 
-    private void HandlePos(TcpClient client, SimpleMessage message)
+    private void HandleMove(TcpClient client, SimpleMessage message)
     {
-        // Get client id (index in list for now)
-        int clientId = this.clients.IndexOf(client);
+        // Get client id (this is the value in the dictionary where the TCPClient is the key)
+        int clientId = this.clients[client];
 
-        System.Console.WriteLine("Got pos from client: " + clientId + " with coordinates: " + message.float1 + "," + message.float2 + "," + message.float3);
+        System.Console.WriteLine("Got move from client: " + clientId + " with input: " + message.float1 + "," + message.float2);
 
         // Add client ID
         message.clientId = clientId;
 
-        // Add to list to create the gameobject instance on the service
+        // Add to list to create the gameobject instance on the server
         Server.messagesToProcess.Add(message);
-
-        // Inform the other clients about the player pos
-        // (NOTE: We should validate it's legal and actually share the server view of the position)
-        this.TransmitMessage(message, excludeClient: client);
     }
 
     private void RemoveClient(TcpClient client)
     {
         //Let the other clients know the player was removed
-        int clientId = this.clients.IndexOf(client);
+        int clientId = this.clients[client];
 
         SimpleMessage message = new SimpleMessage(MessageType.PlayerLeft);
         message.clientId = clientId;
@@ -572,6 +747,7 @@ public class NetworkServer
         this.DisconnectPlayer(client);
         this.clients.Remove(client);
         this.readyClients.Remove(client);
+        this.server.RemovePlayer(clientId);
     }
 
 	private void DisconnectPlayer(TcpClient client)

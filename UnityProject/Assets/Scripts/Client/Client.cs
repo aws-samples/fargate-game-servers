@@ -28,8 +28,6 @@ public class Client : MonoBehaviour
     //We get events back from the NetworkServer through this static list
     public static List<SimpleMessage> messagesToProcess = new List<SimpleMessage>();
 
-    private float updateCounter = 0.0f;
-
     //Cognito credentials for sending signed requests to the API
     public static Amazon.Runtime.ImmutableCredentials cognitoCredentials = null;
 
@@ -74,24 +72,17 @@ public class Client : MonoBehaviour
         StartCoroutine(ConnectToServer());
     }
 
-    // Update is called once per frame
-    void Update()
+    // Fixed Update is called once physics step which is configured to 30 / seconds
+    // We use this same step for client and server to send messages and sync positions
+    void FixedUpdate()
     {
         if (this.localPlayer != null)
         {
             // Process any messages we have received over the network
             this.ProcessMessages();
 
-            // Only send updates 20 times per second to avoid flooding server with messages
-            this.updateCounter += Time.deltaTime;
-            if (updateCounter < 0.05f)
-            {
-                return;
-            }
-            this.updateCounter = 0.0f;
-
-            // Send current position data to other players through the server
-            this.SendPosition();
+            // Send current Move command
+            this.SendMove();
 
             // Receive new messages
             this.networkClient.Update();
@@ -116,6 +107,7 @@ public class Client : MonoBehaviour
             // Create character
             this.localPlayer = new NetworkPlayer(0);
             this.localPlayer.Initialize(characterPrefab, new Vector3(UnityEngine.Random.Range(-5,5), 1, UnityEngine.Random.Range(-5, 5)));
+            this.localPlayer.ResetTarget();
             this.networkClient.SendMessage(this.localPlayer.GetSpawnMessage());
         }
 
@@ -131,12 +123,17 @@ public class Client : MonoBehaviour
         // Go through any messages to process
         foreach (SimpleMessage msg in messagesToProcess)
         {
+            // Own position
+            if(msg.messageType == MessageType.PositionOwn)
+            {
+                this.localPlayer.ReceivePosition(msg, this.characterPrefab);
+            }
             // players spawn and position messages
-            if (msg.messageType == MessageType.Spawn || msg.messageType == MessageType.Position || msg.messageType == MessageType.PlayerLeft)
+            else if (msg.messageType == MessageType.Spawn || msg.messageType == MessageType.Position || msg.messageType == MessageType.PlayerLeft)
             {
                 if (msg.messageType == MessageType.Spawn && this.EnemyPlayerExists(msg.clientId) == false)
                 {
-                    Debug.Log("Enemy spawned: " + msg.float1 + "," + msg.float2 + "," + msg.float3);
+                    Debug.Log("Enemy spawned: " + msg.float1 + "," + msg.float2 + "," + msg.float3 + " ID: " + msg.clientId);
                     NetworkPlayer enemyPlayer = new NetworkPlayer(msg.clientId);
                     this.enemyPlayers.Add(enemyPlayer);
                     enemyPlayer.Spawn(msg, this.enemyPrefab);
@@ -147,7 +144,7 @@ public class Client : MonoBehaviour
                     //Setup enemycharacter if not done yet
                     if (this.EnemyPlayerExists(msg.clientId) == false)
                     {
-                        Debug.Log("Creating new");
+                        Debug.Log("Creating new with ID: " + msg.clientId);
                         NetworkPlayer newPlayer = new NetworkPlayer(msg.clientId);
                         this.enemyPlayers.Add(newPlayer);
                         newPlayer.Spawn(msg, this.enemyPrefab);
@@ -160,10 +157,12 @@ public class Client : MonoBehaviour
                 }
                 else if(msg.messageType == MessageType.PlayerLeft)
                 {
+                    Debug.Log("Player left " + msg.clientId);
                     // A player left, remove from list and delete gameobject
                     NetworkPlayer enemyPlayer = this.GetEnemyPlayer(msg.clientId);
                     if(enemyPlayer != null)
                     {
+                        Debug.Log("Found enemy player");
                         enemyPlayer.DeleteGameObject();
                         this.enemyPlayers.Remove(enemyPlayer);
                         justLeftClients.Add(msg.clientId);
@@ -178,17 +177,17 @@ public class Client : MonoBehaviour
         {
             enemyPlayer.InterpolateToTarget();
         }
+
+        // Interpolate player towards his/her current target
+        this.localPlayer.InterpolateToTarget();
     }
 
-    // Sends the position of the local palyer to the server
-    void SendPosition()
+    void SendMove()
     {
         // Send position if changed
-        var newPosMessage = this.localPlayer.GetPositionMessage();
-        if(newPosMessage != null)
+        var newPosMessage = this.localPlayer.GetMoveMessage();
+        if (newPosMessage != null)
             this.networkClient.SendMessage(newPosMessage);
     }
-
 #endif
-
 }

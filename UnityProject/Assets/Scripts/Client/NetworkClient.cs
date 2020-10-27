@@ -185,6 +185,8 @@ public class NetworkClient
 			HandleOtherPlayerSpawned(msg);
 		else if (msg.messageType == MessageType.Position)
 			HandleOtherPlayerPos(msg);
+		else if (msg.messageType == MessageType.PositionOwn)
+			HandlePlayerPos(msg);
 		else if (msg.messageType == MessageType.PlayerLeft)
 			HandleOtherPlayerLeft(msg);
 	}
@@ -214,6 +216,11 @@ public class NetworkClient
 
 	private void HandleOtherPlayerPos(SimpleMessage message)
     {
+		Client.messagesToProcess.Add(message);
+	}
+
+	private void HandlePlayerPos(SimpleMessage message)
+	{
 		Client.messagesToProcess.Add(message);
 	}
 

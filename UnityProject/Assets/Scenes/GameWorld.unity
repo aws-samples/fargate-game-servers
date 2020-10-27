@@ -185,6 +185,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c7e6931ff73724c35986212b1c064457, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  playerPrefab: {fileID: 4655882291869799809, guid: f8697ba2176fc4bfa995833f566a792d,
+    type: 3}
+  taskDataArn: 
+  taskDataArnWithContainer: 
+  publicIP: 
+  redisUpdateCounter: 0
+  lastPlayerCount: 0
+  gameStarted: 0
+  waitingForTermination: 0
+  waitingForTerminateCounter: 5
 --- !u!4 &559951046
 Transform:
   m_ObjectHideFlags: 0
