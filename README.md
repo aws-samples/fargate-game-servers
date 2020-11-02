@@ -238,10 +238,13 @@ The client will receive the IP and Port of the game server or an error message i
 
 The game server is developed with Unity in the same project (`UnityProject`) as the client. Using the Scripting Define Symbol `SERVER` will define it as a server build. The server is built as part of deploying the Task definition by creating a Docker image of the server locally (using the latest build in LinuxServerBuild) and uploading that to an ECR repository. See `LinuxServerBuild/Dockerfile` for the definition of the Docker image. It uses an Ubuntu base image but you could replace this with more lightweight options as well.
 
+NOTE: The communication protocol is TCP for simplicity of the example. For realtime data such as the position data in the example, the recommended protocol is UDP for maximum performance.
+
 Key Server functionality:
  * Starts a TcpListener and starts accepting clients
  * Accepts clients up the the maximum amount of players and keeps track of connected clients
- * Transmits messages between clients (position updates etc.) over TCP
+ * Simulates the game world
+ * Receives input from clients over TCP and broadcasts the player positions to all players
  * Starts a new game sessions when no clients are connected anymore
  * Updates game server data to Redis by calling a Lambda function
  * Terminates the process once maximum amount of game sessions are hosted (3 by default)
