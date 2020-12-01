@@ -56,6 +56,19 @@ def lambda_handler(event, context):
 
         try:
 
+            #  Get Task count in the Cluster for reference
+            #  We will use this to detect failing builds that don't report correctly back to Redis
+            #  Using Pagination to get all Tasks (even over 100)
+            ecs = boto3.client("ecs")
+            task_count = 0
+            response = ecs.list_tasks(cluster=fargate_cluster_name,launchType='FARGATE')
+            task_count += len(response["taskArns"])
+            while "nextToken" in response:
+                    response = ecs.list_tasks(cluster=fargate_cluster_name,launchType='FARGATE', nextToken=response["nextToken"])
+                    task_count += len(response["taskArns"])
+            expected_amount_of_game_servers = task_count * containers_in_task
+            print("Tasks running currently: " + str(task_count) + " Expecting game server count: " + str(expected_amount_of_game_servers))
+
             # 1. Get the available priority, available, active and full servers (support up to 100k each) to calculate total sum
             available_game_servers_response = redis_client.scan(count=100000,match="available-gameserver-*")
             available_game_servers = len(available_game_servers_response[1])
@@ -73,7 +86,16 @@ def lambda_handler(event, context):
             total_game_servers = available_game_servers + available_priority_game_servers + active_game_servers + full_game_servers
 
             print("{ \"Total_game_servers\" : \"" + str(total_game_servers) + "\" }")
-            
+
+            # If there's triple the amount of Tasks compared to registered game servers,
+            # we can safely say there's an issue in the game servers (not reporting to Redis)
+            # In this case we skip any new starts
+            if expected_amount_of_game_servers > (total_game_servers * 3):
+                print("ERROR: We are running over triple the amount of containers compared to registered game servers. Server Build is clearly broken.");
+                print("WILL NOT START NEW GAME SERVERS TO AVOID COST OVERLOAD!")
+                time.sleep(1)
+                continue
+
             # Calculate the 0-1 percentage value of available game servers
             percentage_available = 0.0
             if total_game_servers > 0:
