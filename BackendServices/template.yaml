@@ -106,7 +106,7 @@ Resources:
     Properties:
       CodeUri: functions/
       Handler: scaler.lambda_handler
-      Runtime: python3.7
+      Runtime: python3.9
       MemorySize: 1024
       ReservedConcurrentExecutions: 1 # We always want exactly one copy of this function running at maximum
       EventInvokeConfig:
@@ -155,7 +155,7 @@ Resources:
     Properties:
       CodeUri: functions/
       Handler: updateredis.lambda_handler
-      Runtime: python3.7
+      Runtime: python3.9
       MemorySize: 1024
       Timeout: 15
       FunctionName: FargateGameServersUpdateGameServerData
@@ -185,7 +185,7 @@ Resources:
     Properties:
       CodeUri: functions/
       Handler: checktaskstatus.lambda_handler
-      Runtime: python3.7
+      Runtime: python3.9
       MemorySize: 1024
       Timeout: 15
       FunctionName: FargateGameServersCheckIfAllContainersInTaskAreDone
@@ -215,7 +215,7 @@ Resources:
     Properties:
       CodeUri: functions/
       Handler: requestgamesession.lambda_handler
-      Runtime: python3.7
+      Runtime: python3.9
       MemorySize: 1024
       Timeout: 15
       Policies:
