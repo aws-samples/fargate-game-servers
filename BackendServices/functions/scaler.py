@@ -8,7 +8,7 @@ import redis
 from datetime import timedelta
 
 # Containers in a single Task (this is configured also outside of the Lambda so update as needed!)
-containers_in_task = 10
+containers_in_task = 1
 
 # We want to keep at least X available game servers running
 total_game_servers_target_min = 30
@@ -52,7 +52,7 @@ def lambda_handler(event, context):
     start_time = time.time()
 
     ### Run the scaler up to 60 seconds (next one will be triggered after 1 minute)
-    while (time.time() - start_time) < 58.0:
+    while (time.time() - start_time) < 59.0:
 
         try:
 
@@ -129,14 +129,14 @@ def lambda_handler(event, context):
                     print("Starting at least one Task as we needed one more game server")
                     amount_to_start = 1
 
-                # Start a game server Fargate Task for each missing game server in batches of 10 (default soft limit, a quota increase can be requested)
-                rounds = int(amount_to_start / 10) + 1
+                # Start a game server Fargate Task for each missing game server in batches of 20
+                rounds = int(amount_to_start / 20) + 1
                 print("Starting " + str(amount_to_start) + " Tasks in " + str(rounds) + " rounds")
                 for i in range(rounds):
-                    start_this_round = 10
+                    start_this_round = 20
                     # Last round we start the remaining tasks
                     if i == rounds-1:
-                        start_this_round = amount_to_start % 10
+                        start_this_round = amount_to_start % 20
                     print("Starting " + str(start_this_round) + " Tasks")
                     if start_this_round > 0:
                         client = boto3.client('ecs')
@@ -175,5 +175,5 @@ def lambda_handler(event, context):
             print("Exception occured in starting Tasks")
         # Wait for next round unless this was the last on this minute
         if time.time() - start_time < 58.0:
-            print("Wait 2 seconds before next round")
-            time.sleep(2.0)
+            print("Wait 1 seconds before next round")
+            time.sleep(1.0)
