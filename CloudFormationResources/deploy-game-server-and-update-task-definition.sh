@@ -17,7 +17,7 @@ aws ecr get-login-password --region $region | docker login --username AWS --pass
 
 # 3. Create Docker Image from latest build (expected to be already created from Unity)
 build_id=$(date +%Y-%m-%d.%H%M%S)
-docker build ../LinuxServerBuild/ -t $accountid.dkr.ecr.$region.amazonaws.com/fargate-game-servers:$build_id
+docker buildx build ../LinuxServerBuild/ --platform=linux/amd64 -t $accountid.dkr.ecr.$region.amazonaws.com/fargate-game-servers:$build_id
 
 # 4. Push the image to ECR
 docker push $accountid.dkr.ecr.$region.amazonaws.com/fargate-game-servers:$build_id
