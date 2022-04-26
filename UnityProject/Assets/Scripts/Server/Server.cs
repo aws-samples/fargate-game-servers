@@ -49,8 +49,9 @@ public class Server : MonoBehaviour
     // TODO: Update this to your selected Region
     RegionEndpoint regionEndpoint = RegionEndpoint.USEast1;
 
-    // How many times the game server is reused for sessions. If you expect very little memory leaks or other issues/crashes, it could be higher
-    public static int totalGameSessionsToHost = 3;
+    // How many times the game server is reused for sessions. The recommendation is 1 to avoid any memory leaks and other issues
+    // If you have very demanding peak scaling needs, reusing the process for multiple sessions can help.
+    public static int totalGameSessionsToHost = 1;
     public static int hostedGameSessions = 0;
 
     // List of players
@@ -80,10 +81,6 @@ public class Server : MonoBehaviour
 
     // Game state
     private bool gameStarted = false;
-
-    // Defines if we're waiting to be terminated (maximum amount of game sessions hosted)
-    public bool waitingForTermination = false;
-    float waitingForTerminateCounter = 5.0f; //We start by checking immediately so set to full 5 seconds
 
     // Helper function to check if a player exists in the enemy list already
     private bool PlayerExists(int clientId)
@@ -138,6 +135,9 @@ public class Server : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
+        // Set the target framerate to 30 FPS to avoid running at 100% CPU. Clients send input at 20 FPS
+        Application.targetFrameRate = 30;
+
         // Get the port for this container
         Server.port = int.Parse(Environment.GetEnvironmentVariable("PORT"));
         Console.WriteLine("My port: " + Server.port);
@@ -205,15 +205,6 @@ public class Server : MonoBehaviour
     // This is the interval we're running the simulation and processing messages on the server
     void FixedUpdate()
     {
-        // 1. If we're waiting for termination, only check if all containers in this Task are done
-        if (this.waitingForTermination)
-        {
-            this.HandleWaitingForTermination();
-            return;
-        }
-
-        // 2. Otherwise run regular update
-
         // Update the Network server to check client status and get messages
         server.Update();
 
@@ -321,50 +312,6 @@ public class Server : MonoBehaviour
         messagesToProcess.Clear();
     }
 
-    private void HandleWaitingForTermination()
-    {
-        this.waitingForTerminateCounter += Time.deltaTime;
-        // Check the status every 5 seconds
-        if (waitingForTerminateCounter > 5.0f)
-        {
-            this.waitingForTerminateCounter = 0.0f;
-
-            Debug.Log("Waiting for other servers in the Task to finish...");
-
-            var lambdaConfig = new AmazonLambdaConfig() { RegionEndpoint = this.regionEndpoint };
-            var lambdaClient = new Amazon.Lambda.AmazonLambdaClient(lambdaConfig);
-
-            // Call Lambda function to check if we should terminate
-            var taskStatusRequestData = new TaskStatusData();
-            taskStatusRequestData.taskArn = this.taskDataArn;
-            var request = new Amazon.Lambda.Model.InvokeRequest()
-            {
-                FunctionName = "FargateGameServersCheckIfAllContainersInTaskAreDone",
-                Payload = JsonConvert.SerializeObject(taskStatusRequestData),
-                InvocationType = InvocationType.RequestResponse
-            };
-
-            // As we are not doing anything else on the server anymore, we can just wait for the invoke response
-            var invokeResponse = lambdaClient.InvokeAsync(request);
-            invokeResponse.Wait();
-            invokeResponse.Result.Payload.Position = 0;
-            var sr = new StreamReader(invokeResponse.Result.Payload);
-            var responseString = sr.ReadToEnd();
-
-            Debug.Log("Got response: " + responseString);
-
-            // Try catching to boolean, if it was a failure, this will also result in false
-            var allServersInTaskDone = false;
-            bool.TryParse(responseString, out allServersInTaskDone);
-
-            if (allServersInTaskDone)
-            {
-                Debug.Log("All servers in the Task done running full amount of sessions --> Terminate");
-                Application.Quit();
-            }
-        }
-    }
-
     public void DisconnectAll()
     {
         this.server.DisconnectAll();
@@ -445,9 +392,9 @@ public class NetworkServer
         Server.hostedGameSessions++;
         if(Server.hostedGameSessions >= Server.totalGameSessionsToHost)
         {
-            Debug.Log("Hosted max sessions, mark server as terminated to Redis and start waiting for other servers in the Task to terminate");
+            Debug.Log("Hosted max sessions, mark server as terminated to Redis and end the Task.");
             this.server.UpdateRedis(serverTerminated: true);
-            this.server.waitingForTermination = true;
+            Application.Quit();
         }
         else
         {
