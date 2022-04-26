@@ -13,5 +13,5 @@ fi
 
 # Build, package and deploy the backend
 sam build
-sam package --s3-bucket $deploymentbucketname --output-template-file template_output.yaml
+sam package --s3-bucket $deploymentbucketname --output-template-file template_output.yaml --region $region
 sam deploy --template-file template_output.yaml --region $region --capabilities CAPABILITY_IAM --stack-name fargate-game-servers-backend
