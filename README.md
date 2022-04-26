@@ -114,7 +114,7 @@ The scaling speed should be sufficient to most needs and if you run the Tasks in
     * Run `CloudFormationResources/deploy-game-server-and-update-task-definition.sh` to build the docker image, create an ECR repository and upload the image and deploy the Task Definition
 6. **Deploy the Backend Services with SAM**
     * Make sure you have the SAM CLI installed
-    * The template uses Python 3.7 for the Lambda functions so **you will need Python 3.7 installed locally as well**. [Download Python 3.7 here](https://www.python.org/downloads/release/python-379/).
+    * The template uses Python 3.9 for the Lambda functions so **you will need Python 3.9 installed locally as well**. [Download Python 3.9 here](https://www.python.org/downloads/release/python-390/).
     * Run the `BackendServices/deploy.sh` script to deploy the backend Services. This first deployment will take some time as the networking interfaces to the VPC are being deployed as well.
     * You should see the Scaler function starting quickly after the Stack is deployed to run every minute and 3-4 Tasks being started in the ECS Cluster, each hosting 10 game server containers
 7. **Set the API endpoint to the Unity Project**
