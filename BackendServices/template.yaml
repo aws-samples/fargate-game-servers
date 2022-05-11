@@ -179,36 +179,6 @@ Resources:
         - AWSCloudFormationReadOnlyAccess
         - AmazonECS_FullAccess
 
-  # Function called from game servers to check if all game servers in Task are done
-  FargateGameServersCheckIfAllContainersInTaskAreDone:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: functions/
-      Handler: checktaskstatus.lambda_handler
-      Runtime: python3.9
-      MemorySize: 1024
-      Timeout: 15
-      FunctionName: FargateGameServersCheckIfAllContainersInTaskAreDone
-      # Environment variables from other stacks to access the resources
-      Environment:
-        Variables:
-          REDIS_ENDPOINT:
-            Fn::ImportValue:
-                !Sub "${RedisResourcesStackName}:ElastiCacheAddress"
-      # We will run this in private subnets to access Redis
-      VpcConfig:
-        SecurityGroupIds: 
-          - Fn::ImportValue:
-              !Sub "${ECSResourcesStackName}:InternalSecurityGroup"
-        SubnetIds: 
-          - Fn::ImportValue:
-              !Sub "${ECSResourcesStackName}:PrivateSubnetOne"
-          - Fn::ImportValue:
-              !Sub "${ECSResourcesStackName}:PrivateSubnetTwo"
-      Policies:
-        - AWSCloudFormationReadOnlyAccess
-        - AmazonECS_FullAccess
-
   # Function called by clients through the API to request a game session
   RequestGameSession:
     Type: AWS::Serverless::Function 
