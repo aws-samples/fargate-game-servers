@@ -11,7 +11,7 @@ from datetime import timedelta
 containers_in_task = 1
 
 # We want to keep at least X available game servers running
-total_game_servers_target_min = 30
+total_game_servers_target_min = 10
 
 # Hard limit for max amount of servers to start at once to avoid hitting API throttling (this is containers not Tasks so with 10 containers per task, max of 30 would be 3 Tasks)
 max_game_servers_to_start = 30
@@ -69,13 +69,10 @@ def lambda_handler(event, context):
             expected_amount_of_game_servers = task_count * containers_in_task
             print("Tasks running currently: " + str(task_count) + " Expecting game server count: " + str(expected_amount_of_game_servers))
 
-            # 1. Get the available priority, available, active and full servers (support up to 100k each) to calculate total sum
+            # 1. Get the available, active and full servers (support up to 100k each) to calculate total sum
             available_game_servers_response = redis_client.scan(count=100000,match="available-gameserver-*")
             available_game_servers = len(available_game_servers_response[1])
-            available_priority_game_servers_response = redis_client.scan(count=100000,match="available-priority-gameserver-*")
-            available_priority_game_servers = len(available_priority_game_servers_response[1])
-            print("{ \"Available_priority_game_servers\" : \"" + str(available_priority_game_servers) + "\" }")
-            print("{ \"Available_game_servers\" : \"" + str(available_game_servers + available_priority_game_servers) + "\" }")
+            print("{ \"Available_game_servers\" : \"" + str(available_game_servers) + "\" }")
             active_game_servers_response = redis_client.scan(count=100000,match="active-gameserver-*")
             active_game_servers = len(active_game_servers_response[1])
             print("{ \"Active_game_servers\" : \"" + str(active_game_servers) + "\" }")
@@ -83,7 +80,7 @@ def lambda_handler(event, context):
             full_game_servers = len(full_game_servers_response[1])
             print("{ \"Full_game_servers\" : \"" + str(full_game_servers) + "\" }")
 
-            total_game_servers = available_game_servers + available_priority_game_servers + active_game_servers + full_game_servers
+            total_game_servers = available_game_servers + active_game_servers + full_game_servers
 
             print("{ \"Total_game_servers\" : \"" + str(total_game_servers) + "\" }")
 
@@ -99,7 +96,7 @@ def lambda_handler(event, context):
             # Calculate the 0-1 percentage value of available game servers
             percentage_available = 0.0
             if total_game_servers > 0:
-                percentage_available = float(available_game_servers + available_priority_game_servers) / float(total_game_servers)
+                percentage_available = float(available_game_servers) / float(total_game_servers)
             print("{ \"Percentage_available\" : \"" + str(percentage_available) + "\" }")
 
             # Spin up the missing servers and make sure we have at least minimum
@@ -130,13 +127,13 @@ def lambda_handler(event, context):
                     amount_to_start = 1
 
                 # Start a game server Fargate Task for each missing game server in batches of 20
-                rounds = int(amount_to_start / 20) + 1
+                rounds = int(amount_to_start / 10) + 1
                 print("Starting " + str(amount_to_start) + " Tasks in " + str(rounds) + " rounds")
                 for i in range(rounds):
-                    start_this_round = 20
+                    start_this_round = 10
                     # Last round we start the remaining tasks
                     if i == rounds-1:
-                        start_this_round = amount_to_start % 20
+                        start_this_round = amount_to_start % 10
                     print("Starting " + str(start_this_round) + " Tasks")
                     if start_this_round > 0:
                         client = boto3.client('ecs')

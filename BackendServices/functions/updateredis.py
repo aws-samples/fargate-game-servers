@@ -44,15 +44,11 @@ def lambda_handler(event, context):
     print("serverTerminated: " + str(serverTerminated))
 
     # Check for outdated player session reservations
-    # Get the last reservation time and check against current time. It could be active, available or available_priority
+    # Get the last reservation time and check against current time. It could be active, available
     game_server_key = "available-gameserver-"+taskArn
     last_reservation_time = redis_client.hget(game_server_key, "last-reservation-time")
     current_reservations = None
-    # No reservation time in available, try priority
-    if last_reservation_time == None:
-        game_server_key = "available-priority-gameserver-"+taskArn
-        last_reservation_time = redis_client.hget(game_server_key, "last-reservation-time")
-    # No reservation time in available or priority, try active
+    # No reservation time in available, try active
     if last_reservation_time == None:
         game_server_key = "active-gameserver-"+taskArn
         last_reservation_time = redis_client.hget(game_server_key, "last-reservation-time")
@@ -95,7 +91,6 @@ def lambda_handler(event, context):
         print("marking server as in use")
         # Delete the possible other gameserver key
         redis_client.delete("available-gameserver-"+taskArn)
-        redis_client.delete("available-priority-gameserver-"+taskArn)
         redis_client.delete("active-gameserver-"+taskArn)
         # Update the full game server info
         redis_client.hset("full-gameserver-"+taskArn, "server-id", taskArn)
@@ -106,18 +101,12 @@ def lambda_handler(event, context):
         redis_client.hset("full-gameserver-"+taskArn, "port", port)
         # Expire in gameserverdata_ttl seconds
         redis_client.expire("full-gameserver-"+taskArn, timedelta(seconds=gameserverdata_ttl))
-        
-        # Mark the whole Task this server is running on as priority
-        # (to make sure we prioritize servers that have already hosted sessions for good rotation)
-        redis_client.set("prioritize-"+onlyTaskArn, "yes")
-        redis_client.expire("prioritize-"+onlyTaskArn, timedelta(seconds=gameserverdata_ttl))
 
     # OPTION 2. If there's someone playing already, add to the active servers (these are used when searching for games)
     elif current_players > 0:
         print("marking server as active (at least one player connected)")
         # Delete the possible other gameserver keys
         redis_client.delete("available-gameserver-"+taskArn)
-        redis_client.delete("available-priority-gameserver-"+taskArn)
         redis_client.delete("full-gameserver-"+taskArn)
         # Update the full game server info
         redis_client.hset("active-gameserver-"+taskArn, "server-id", taskArn)
@@ -133,29 +122,11 @@ def lambda_handler(event, context):
         # Expire in gameserverdata_ttlseconds
         redis_client.expire("active-gameserver-"+taskArn, timedelta(seconds=gameserverdata_ttl))
 
-        # Mark the whole Task this server is running on as priority
-        # (to make sure we prioritize servers that have already hosted sessions for good rotation)
-        redis_client.set("prioritize-"+onlyTaskArn, "yes")
-        redis_client.expire("prioritize-"+onlyTaskArn, timedelta(seconds=gameserverdata_ttl))
-
     # OPTION 3. if server is available and no players, delete from full and active servers and set current status based on parameters
     else:
         print("marking server available")
 
         available_prefix = "available-gameserver-"
-
-        # Check if we should mark this priority (Task already hosted other game sessions)
-        priority = redis_client.get("prioritize-"+onlyTaskArn)
-        print("priority " + str(priority))
-        if redis_client.get("prioritize-"+onlyTaskArn) != None:
-            print("This server should be marked priority")
-            # Delete the possible other available key as it will never be used again once the Task is priority
-            redis_client.delete("available-gameserver-"+taskArn)
-            # Use the priority prefix
-            available_prefix = "available-priority-gameserver-"
-            # Update priority key so it doesn't expire
-            redis_client.set("prioritize-"+onlyTaskArn, "yes")
-            redis_client.expire("prioritize-"+onlyTaskArn, timedelta(seconds=gameserverdata_ttl))
 
         # Delete the possible other gameserver keys
         redis_client.delete("full-gameserver-"+taskArn)
@@ -167,7 +138,7 @@ def lambda_handler(event, context):
         redis_client.hset(available_prefix+taskArn, "ready", ready) #Server will define itself ready when it's started
         redis_client.hset(available_prefix+taskArn, "publicIP", publicIP)
         redis_client.hset(available_prefix+taskArn, "port", port)
-        # Update last reservation time and reservations as well if we found one to move this information to the priority entry
+        # Update last reservation time and reservations as well
         if last_reservation_time != None:
             redis_client.hset(available_prefix+taskArn, "last-reservation-time", last_reservation_time)
             redis_client.hset(available_prefix+taskArn, "reserved-player-slots", current_reservations)

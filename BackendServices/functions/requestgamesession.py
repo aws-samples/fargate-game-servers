@@ -53,6 +53,10 @@ def lambda_handler(event, context):
                     print("current reservations: " + str(current_reservations))
                     print("max players: " + str(max_players))
 
+                    if max_players == None:
+                        print("Server data not available anymore (terminated), try next one.")
+                        continue
+
                     if current_reservations == None:
                         current_reservations = 0
 
@@ -96,17 +100,8 @@ def lambda_handler(event, context):
     # We'll try this 30 times and then just fail
     for x in range(30):
         try:
-            #   Check priority list first for the first 20 rounds (Game servers on Tasks that already hosted sessions) for good rotation of Tasks
-            #   For the last 10 rounds we switch to non-priority to make sure any issues in priority won't fail us completely
             available_game_servers_response = None
-            if x < 20:
-                print("No active game sessions, checking priority servers first from available")
-                available_game_servers_response = redis_client.scan(count=100000,match="available-priority-gameserver-*")
-
-            if available_game_servers_response == None or len(available_game_servers_response[1]) == 0:
-                # No priority servers, check list of servers on fresh Tasks
-                print("No priority servers. Checking if there are available servers with no players")
-                available_game_servers_response = redis_client.scan(count=100000,match="available-gameserver-*")
+            available_game_servers_response = redis_client.scan(count=100000,match="available-gameserver-*")
 
             if len(available_game_servers_response[1]) > 0:
                 print("Found an available game server, trying to take the spot")
@@ -114,6 +109,13 @@ def lambda_handler(event, context):
                 #print(available_game_servers_response[1])
                 #server_info = redis_client.hgetall(available_game_servers_response[1][0])
                 #print(server_info)
+            
+            else:
+                print("no available game servers found, return")
+                return {
+                    "statusCode": 500,
+                    "body": json.dumps({ 'failed': 'No available game servers'})
+                }
 
             # Try to claim a spot on a random available game server
             # Use WATCH locking to cancel the placement in case someone else took it a the same time
@@ -124,6 +126,11 @@ def lambda_handler(event, context):
 
                 # Make sure the server is ready to accept connections
                 server_ready = redis_client.hget(game_server_key, b'ready')
+
+                if server_ready == None:
+                    print("Server information not available anymore (terminated). Try next one")
+                    continue
+
                 print("Server ready: " + str(server_ready))
                 if int(server_ready) == 0:
                     print("Server not ready yet, retry.")
@@ -136,6 +143,11 @@ def lambda_handler(event, context):
                 # Server will use "current-players" for actually connected players
                 current_reservations = pipe.hget(game_server_key, b'reserved-player-slots')
                 max_players = pipe.hget(game_server_key, b'max-players')
+
+                if max_players == None:
+                    print("Server information not available anymore (terminated). Try next one")
+                    continue
+
                 print("current reservations: " + str(current_reservations))
                 print("max players: " + str(max_players))
 
