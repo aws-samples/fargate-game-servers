@@ -61,7 +61,7 @@ While the configuration for the ElastiCache Redis Cluster is sufficient for a la
 
 **Fargate Task Scaling and Throttling**
 
-You can start 10 new Tasks per one request to the ECS API and the these requests will throttle as well allowing around 1 Task/second rate of starting Tasks (with burst capacity to 10/s). This solution can start around 600 game servers (60 Tasks) per minute with the default service limits as each Task hosts 10 game server containers.
+You can start 10 new Tasks per one request to the ECS API and the these requests will throttle allowing around 20 Tasks/second rate of starting Tasks (with burst capacity to 100/s). The solution is configured to start around 600 game servers per minute with (60 Tasks with 10 game server containers). As Fargate can now scale significantly faster as it did at the time of creating this sample, you could reach a high scaling speed with a lot less containers per Task (even down to 1/Task).
 
 The scaling speed should be sufficient to most needs and if you run the Tasks in multiple Regions, each have their own similar scaling capabilities. In case you need even faster scaling / more available game servers you can:
 
